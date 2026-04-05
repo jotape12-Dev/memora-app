@@ -18,6 +18,9 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# Apple secret generator (contém referências a chaves privadas)
+gen-apple-secret.js
+
 # Metro
 .metro-health-check*
 
@@ -31,7 +34,9 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
+.env.example
 
 # typescript
 *.tsbuildinfo
@@ -39,3 +44,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Claude md
+CLAUDE.md

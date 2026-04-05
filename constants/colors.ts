@@ -1,0 +1,41 @@
+export const Colors = {
+  light: {
+    primary: "#01696f",
+    primaryHover: "#0c4e54",
+    primaryHighlight: "#cedcd8",
+    background: "#f7f6f2",
+    surface: "#f9f8f5",
+    muted: "#e8e7e3",
+    text: "#28251d",
+    textSecondary: "#7a7974",
+    border: "#d4d1ca",
+    success: "#437a22",
+    error: "#a12c7b",
+    warning: "#f59e0b",
+  },
+  dark: {
+    primary: "#01696f",
+    primaryHover: "#0c4e54",
+    primaryHighlight: "#2a3d38",
+    background: "#171614",
+    surface: "#1c1b19",
+    muted: "#2d2c2a",
+    text: "#cdccca",
+    textSecondary: "#7a7974",
+    border: "#3d3c3a",
+    success: "#437a22",
+    error: "#a12c7b",
+    warning: "#f59e0b",
+  },
+} as const;
+
+export const DeckColors = [
+  "#01696f",
+  "#2563eb",
+  "#7c3aed",
+  "#db2777",
+  "#ea580c",
+  "#16a34a",
+  "#ca8a04",
+  "#64748b",
+];
