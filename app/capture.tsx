@@ -19,6 +19,7 @@ import { useDecksStore } from "../stores/decksStore";
 import { useAuthStore } from "../stores/authStore";
 import { Button } from "../components/Button";
 import { GenerationLimitBadge } from "../components/GenerationLimitBadge";
+import { DismissKeyboard } from "../components/DismissKeyboard";
 
 type Tab = "camera" | "text";
 
@@ -140,7 +141,12 @@ export default function CaptureScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <DismissKeyboard>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -312,7 +318,7 @@ export default function CaptureScreen() {
         </View>
 
         {/* Premium link */}
-        {profile && !profile.is_premium && (
+        {profile?.is_premium && (
           <Pressable onPress={() => router.push("/generate-topic")} style={styles.premiumLink}>
             <Ionicons name="star" size={16} color={colors.primary} />
             <Text style={[styles.premiumLinkText, { color: colors.primary }]}>
@@ -321,6 +327,7 @@ export default function CaptureScreen() {
           </Pressable>
         )}
       </ScrollView>
+      </DismissKeyboard>
     </SafeAreaView>
   );
 }

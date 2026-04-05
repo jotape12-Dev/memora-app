@@ -9,6 +9,9 @@ import {
   TextInput,
   RefreshControl,
   StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -17,6 +20,7 @@ import { useThemeColors } from "../../constants/theme";
 import { useDecksStore } from "../../stores/decksStore";
 import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
+import { DismissKeyboard } from "../../components/DismissKeyboard";
 import type { Flashcard } from "../../types/database";
 
 export default function DeckDetailScreen() {
@@ -25,7 +29,7 @@ export default function DeckDetailScreen() {
   const { decks, deleteDeck } = useDecksStore();
   const {
     flashcards,
-    dueCards,
+    deckDueCards,
     loading,
     fetchFlashcardsByDeck,
     fetchDueCards,
@@ -39,7 +43,7 @@ export default function DeckDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const deck = decks.find((d) => d.id === deckId);
-  const dueCount = dueCards.filter((c) => c.deck_id === deckId).length;
+  const dueCount = deckDueCards.length;
 
   useEffect(() => {
     if (deckId) {
@@ -207,31 +211,36 @@ export default function DeckDetailScreen() {
 
       {/* Add Card Modal */}
       <Modal visible={showAddModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Novo Flashcard</Text>
-            <TextInput
-              value={question}
-              onChangeText={setQuestion}
-              placeholder="Pergunta"
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              style={[styles.textArea, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-            />
-            <TextInput
-              value={answer}
-              onChangeText={setAnswer}
-              placeholder="Resposta"
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              style={[styles.textArea, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-            />
-            <View style={styles.modalButtons}>
-              <Button title="Cancelar" variant="ghost" onPress={() => setShowAddModal(false)} />
-              <Button title="Adicionar" onPress={handleAddCard} />
-            </View>
-          </View>
-        </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss}>
+            <Pressable style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Novo Flashcard</Text>
+              <TextInput
+                value={question}
+                onChangeText={setQuestion}
+                placeholder="Pergunta"
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                style={[styles.textArea, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+              />
+              <TextInput
+                value={answer}
+                onChangeText={setAnswer}
+                placeholder="Resposta"
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                style={[styles.textArea, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+              />
+              <View style={styles.modalButtons}>
+                <Button title="Cancelar" variant="ghost" onPress={() => setShowAddModal(false)} />
+                <Button title="Adicionar" onPress={handleAddCard} />
+              </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

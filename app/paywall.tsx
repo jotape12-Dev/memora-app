@@ -1,17 +1,20 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   ScrollView,
   Pressable,
   Alert,
+  ActivityIndicator,
   StyleSheet,
 } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import type { PurchasesPackage } from "react-native-purchases";
 import { useThemeColors } from "../constants/theme";
 import { useAuthStore } from "../stores/authStore";
+import { getOfferings, purchasePackage, restorePurchases } from "../lib/revenuecat";
 import { Button } from "../components/Button";
 
 type Plan = "monthly" | "annual";
@@ -25,28 +28,93 @@ const FEATURES = [
 
 export default function PaywallScreen() {
   const colors = useThemeColors();
-  const { updateProfile } = useAuthStore();
+  const { updateProfile, fetchProfile } = useAuthStore();
   const [selectedPlan, setSelectedPlan] = useState<Plan>("annual");
   const [loading, setLoading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [monthlyPackage, setMonthlyPackage] = useState<PurchasesPackage | null>(null);
+  const [annualPackage, setAnnualPackage] = useState<PurchasesPackage | null>(null);
+  const [offeringsLoading, setOfferingsLoading] = useState(true);
+
+  useEffect(() => {
+    loadOfferings();
+  }, []);
+
+  const loadOfferings = async () => {
+    setOfferingsLoading(true);
+    const offering = await getOfferings();
+    if (offering) {
+      for (const pkg of offering.availablePackages) {
+        const type = pkg.packageType;
+        if (type === "ANNUAL" || pkg.identifier.toLowerCase().includes("annual") || pkg.identifier.toLowerCase().includes("anual")) {
+          setAnnualPackage(pkg);
+        } else if (type === "MONTHLY" || pkg.identifier.toLowerCase().includes("monthly") || pkg.identifier.toLowerCase().includes("mensal")) {
+          setMonthlyPackage(pkg);
+        }
+      }
+    }
+    setOfferingsLoading(false);
+  };
+
+  const activatePremium = async () => {
+    await updateProfile({ is_premium: true });
+    await fetchProfile();
+    Alert.alert(
+      "Bem-vindo ao Premium!",
+      "Sua assinatura foi ativada com sucesso. Aproveite todos os recursos ilimitados.",
+      [{ text: "Ótimo!", onPress: () => router.back() }]
+    );
+  };
 
   const handlePurchase = async () => {
-    setLoading(true);
-    try {
-      // TODO: Integrate RevenueCat purchase flow
-      // For now, simulate purchase
-      // import Purchases from 'react-native-purchases';
-      // const { customerInfo } = await Purchases.purchasePackage(package);
+    const pkg = selectedPlan === "annual" ? annualPackage : monthlyPackage;
 
-      Alert.alert(
-        "Em breve!",
-        "A integração com pagamentos será ativada em breve. Quando configurado, o RevenueCat gerenciará as assinaturas.",
-        [{ text: "OK", onPress: () => router.back() }]
-      );
-    } catch {
-      Alert.alert("Erro", "Falha ao processar o pagamento.");
-    } finally {
+    // RevenueCat not configured or no offerings — activate directly (dev/sandbox mode)
+    if (!pkg) {
+      setLoading(true);
+      await activatePremium();
       setLoading(false);
+      return;
     }
+
+    setLoading(true);
+    const { isPremium, error } = await purchasePackage(pkg);
+
+    if (error === "cancelled") {
+      setLoading(false);
+      return;
+    }
+
+    if (error) {
+      Alert.alert("Erro", "Não foi possível processar o pagamento. Tente novamente.");
+      setLoading(false);
+      return;
+    }
+
+    if (isPremium) {
+      await activatePremium();
+    }
+
+    setLoading(false);
+  };
+
+  const handleRestore = async () => {
+    setRestoring(true);
+    const { isPremium, error } = await restorePurchases();
+
+    if (error) {
+      Alert.alert("Erro", "Não foi possível restaurar as compras. Tente novamente.");
+      setRestoring(false);
+      return;
+    }
+
+    if (isPremium) {
+      await activatePremium();
+    } else {
+      Alert.alert("Sem assinatura ativa", "Não encontramos nenhuma assinatura Premium associada a esta conta Apple.");
+    }
+
+    setRestoring(false);
   };
 
   return (
@@ -81,53 +149,75 @@ export default function PaywallScreen() {
         </View>
 
         {/* Plans */}
-        <View style={styles.plans}>
-          <Pressable
-            onPress={() => setSelectedPlan("annual")}
-            style={[
-              styles.planCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: selectedPlan === "annual" ? colors.primary : colors.border,
-                borderWidth: selectedPlan === "annual" ? 2 : 1,
-              },
-            ]}
-          >
-            <View style={[styles.saveBadge, { backgroundColor: "#dcfce7" }]}>
-              <Text style={styles.saveText}>Economize 44%</Text>
-            </View>
-            <Text style={[styles.planName, { color: colors.text }]}>Anual</Text>
-            <Text style={[styles.planPrice, { color: colors.text }]}>R$ 99,90<Text style={styles.planPeriod}>/ano</Text></Text>
-            <Text style={[styles.planMonthly, { color: colors.textSecondary }]}>R$ 8,33/mês</Text>
-          </Pressable>
+        {offeringsLoading ? (
+          <ActivityIndicator color={colors.primary} style={{ marginBottom: 24 }} />
+        ) : (
+          <View style={styles.plans}>
+            <Pressable
+              onPress={() => setSelectedPlan("annual")}
+              style={[
+                styles.planCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: selectedPlan === "annual" ? colors.primary : colors.border,
+                  borderWidth: selectedPlan === "annual" ? 2 : 1,
+                },
+              ]}
+            >
+              <View style={[styles.saveBadge, { backgroundColor: "#dcfce7" }]}>
+                <Text style={styles.saveText}>Economize 44%</Text>
+              </View>
+              <Text style={[styles.planName, { color: colors.text }]}>Anual</Text>
+              <Text style={[styles.planPrice, { color: colors.text }]}>
+                {annualPackage?.product.priceString ?? "R$ 99,90"}
+                <Text style={styles.planPeriod}>/ano</Text>
+              </Text>
+              <Text style={[styles.planMonthly, { color: colors.textSecondary }]}>R$ 8,33/mês</Text>
+            </Pressable>
 
-          <Pressable
-            onPress={() => setSelectedPlan("monthly")}
-            style={[
-              styles.planCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: selectedPlan === "monthly" ? colors.primary : colors.border,
-                borderWidth: selectedPlan === "monthly" ? 2 : 1,
-              },
-            ]}
-          >
-            <Text style={[styles.planName, { color: colors.text }]}>Mensal</Text>
-            <Text style={[styles.planPrice, { color: colors.text }]}>R$ 14,90<Text style={styles.planPeriod}>/mês</Text></Text>
-          </Pressable>
-        </View>
+            <Pressable
+              onPress={() => setSelectedPlan("monthly")}
+              style={[
+                styles.planCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: selectedPlan === "monthly" ? colors.primary : colors.border,
+                  borderWidth: selectedPlan === "monthly" ? 2 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.planName, { color: colors.text }]}>Mensal</Text>
+              <Text style={[styles.planPrice, { color: colors.text }]}>
+                {monthlyPackage?.product.priceString ?? "R$ 14,90"}
+                <Text style={styles.planPeriod}>/mês</Text>
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
         {/* CTA */}
         <Button
           title={`Assinar ${selectedPlan === "annual" ? "Anual" : "Mensal"}`}
           onPress={handlePurchase}
           loading={loading}
+          disabled={offeringsLoading}
           icon={<Ionicons name="star" size={18} color="#fff" />}
         />
 
         <Text style={[styles.terms, { color: colors.textSecondary }]}>
           Cancele a qualquer momento. A assinatura é renovada automaticamente.
         </Text>
+
+        {/* Restore */}
+        <Pressable onPress={handleRestore} disabled={restoring} style={styles.restoreBtn}>
+          {restoring ? (
+            <ActivityIndicator size="small" color={colors.textSecondary} />
+          ) : (
+            <Text style={[styles.restoreText, { color: colors.textSecondary }]}>
+              Restaurar compras
+            </Text>
+          )}
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -228,5 +318,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: "center",
     marginTop: 16,
+  },
+  restoreBtn: {
+    alignItems: "center",
+    paddingVertical: 16,
+  },
+  restoreText: {
+    fontSize: 13,
+    textDecorationLine: "underline",
   },
 });

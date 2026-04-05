@@ -1,18 +1,18 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY")!;
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Content-Type": "application/json",
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-      },
-    });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
@@ -20,23 +20,25 @@ Deno.serve(async (req) => {
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "No authorization header" }), {
         status: 401,
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       });
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    // Pass Authorization header to client — Supabase recommended pattern
+    const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    });
 
-    // Get user from JWT
-    const token = authHeader.replace("Bearer ", "");
-    const supabaseAuth = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!);
-    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token);
-
+    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       });
     }
+
+    // Admin client for DB operations
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Verify premium status
     const { data: profile } = await supabase
@@ -48,7 +50,7 @@ Deno.serve(async (req) => {
     if (!profile?.is_premium) {
       return new Response(JSON.stringify({ error: "premium_required" }), {
         status: 403,
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       });
     }
 
@@ -57,66 +59,67 @@ Deno.serve(async (req) => {
     if (!topic || topic.trim().length < 3) {
       return new Response(JSON.stringify({ error: "Topic must be at least 3 characters" }), {
         status: 400,
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       });
     }
 
     const clampedQuantity = Math.min(Math.max(quantity, 5), 30);
 
-    const prompt = `You are an expert educator specialized in creating high-quality study flashcards.
-
-Create ${clampedQuantity} flashcards about: "${topic}"
-Level: ${level} (Básico/Intermediário/Avançado)
-Language: ${language}
-${additionalContext ? `Additional context: ${additionalContext}` : ""}
-
-Rules:
-- Cover the most important concepts of this topic comprehensively
-- Questions should vary in type: definitions, applications, comparisons, examples
-- Answers should be clear, complete but concise
-- Ensure factual accuracy
-- Return ONLY valid JSON, no extra text
-
-Return format:
-{"flashcards": [{"question": "...", "answer": "..."}]}`;
-
-    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "You are an expert educator. Always respond with valid JSON only." },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.7,
-        max_tokens: 4000,
-      }),
-    });
-
-    if (!openaiResponse.ok) {
-      const errorText = await openaiResponse.text();
-      console.error("OpenAI API error:", errorText);
-      return new Response(JSON.stringify({ error: "AI generation failed" }), {
-        status: 502,
+    // Call Gemini API
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `Você é um educador especialista em criar flashcards de alta qualidade para estudo.
+
+Crie exatamente ${clampedQuantity} flashcards sobre: "${topic}"
+Nível: ${level}
+Idioma: ${language}
+${additionalContext ? `Contexto adicional: ${additionalContext}` : ""}
+
+Regras:
+- Cubra os conceitos mais importantes do tópico de forma abrangente
+- Varie os tipos de pergunta: definições, aplicações, comparações, exemplos
+- As respostas devem ser claras, completas mas concisas (máximo 3 frases)
+- Garanta precisão factual
+- Retorne APENAS um objeto JSON válido, sem texto extra, sem markdown, sem blocos de código
+- Responda no idioma especificado: ${language}
+
+Retorne exatamente neste formato JSON (nada mais):
+{"flashcards": [{"question": "...", "answer": "..."}]}`
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 4000,
+          },
+        }),
+      }
+    );
+
+    if (!geminiResponse.ok) {
+      const errorText = await geminiResponse.text();
+      console.error("Gemini API error:", geminiResponse.status, errorText);
+      return new Response(JSON.stringify({ error: `Gemini error ${geminiResponse.status}: ${errorText.substring(0, 300)}` }), {
+        status: 502,
+        headers: corsHeaders,
       });
     }
 
-    const openaiData = await openaiResponse.json();
-    const content = openaiData.choices?.[0]?.message?.content;
+    const geminiData = await geminiResponse.json();
+    const content = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!content) {
       return new Response(JSON.stringify({ error: "Empty AI response" }), {
         status: 502,
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       });
     }
 
-    // Extract JSON — try direct parse, then regex fallback
     let parsed;
     try {
       parsed = JSON.parse(content);
@@ -125,7 +128,7 @@ Return format:
       if (!jsonMatch) {
         return new Response(JSON.stringify({ error: "Failed to parse AI response" }), {
           status: 500,
-          headers: { "Content-Type": "application/json" },
+          headers: corsHeaders,
         });
       }
       try {
@@ -133,7 +136,7 @@ Return format:
       } catch {
         return new Response(JSON.stringify({ error: "Failed to parse AI response" }), {
           status: 500,
-          headers: { "Content-Type": "application/json" },
+          headers: corsHeaders,
         });
       }
     }
@@ -141,19 +144,19 @@ Return format:
     if (!parsed?.flashcards || !Array.isArray(parsed.flashcards)) {
       return new Response(JSON.stringify({ error: "Invalid AI response format" }), {
         status: 500,
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       });
     }
 
     return new Response(JSON.stringify(parsed), {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: corsHeaders,
     });
   } catch (error) {
     console.error("Error:", error);
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
+      headers: corsHeaders,
     });
   }
 });

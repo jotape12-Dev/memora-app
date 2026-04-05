@@ -6,6 +6,7 @@ interface ReviewState {
   sessions: ReviewSession[];
   streak: number;
   totalReviewed: number;
+  activeDays: string[]; // "YYYY-MM-DD" strings of days with at least one review
   loading: boolean;
   fetchSessions: () => Promise<void>;
   createSession: (deckId: string, cardsReviewed: number, cardsCorrect: number, durationSeconds: number) => Promise<void>;
@@ -16,6 +17,7 @@ export const useReviewStore = create<ReviewState>((set) => ({
   sessions: [],
   streak: 0,
   totalReviewed: 0,
+  activeDays: [],
   loading: false,
 
   fetchSessions: async () => {
@@ -74,6 +76,8 @@ export const useReviewStore = create<ReviewState>((set) => ({
     const dates = [...new Set(
       data.map((s) => new Date(s.created_at).toISOString().split("T")[0])
     )].sort((a, b) => b.localeCompare(a));
+
+    set({ activeDays: dates });
 
     const today = new Date().toISOString().split("T")[0];
     const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];

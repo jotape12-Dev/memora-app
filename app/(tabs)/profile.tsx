@@ -7,6 +7,16 @@ import {
   Alert,
   StyleSheet,
 } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  withDelay,
+  withSpring,
+  Easing,
+} from "react-native-reanimated";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
@@ -23,10 +33,39 @@ export default function ProfileScreen() {
   const { decks } = useDecksStore();
   const { dueCards } = useDecksStore();
 
+  // Animations for premium card
+  const cardScale = useSharedValue(0.96);
+  const shimmerX = useSharedValue(-120);
+
   useEffect(() => {
     fetchSessions();
     calculateStreak();
   }, [fetchSessions, calculateStreak]);
+
+  useEffect(() => {
+    if (profile?.is_premium) {
+      // Entrance scale pop
+      cardScale.value = withSpring(1, { damping: 14, stiffness: 160 });
+
+      // Shimmer loop: slide across every ~5s
+      shimmerX.value = withRepeat(
+        withSequence(
+          withDelay(600, withTiming(420, { duration: 2000, easing: Easing.out(Easing.quad) })),
+          withTiming(-120, { duration: 0 })
+        ),
+        -1,
+        false
+      );
+    }
+  }, [profile?.is_premium]);
+
+  const cardAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: cardScale.value }],
+  }));
+
+  const shimmerAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: shimmerX.value }, { skewX: "-18deg" }],
+  }));
 
   const totalCards = decks.reduce((sum, d) => sum + d.card_count, 0);
 
@@ -94,34 +133,39 @@ export default function ProfileScreen() {
         </View>
 
         {/* Premium Card */}
-        <Pressable
-          onPress={() => !profile?.is_premium && router.push("/paywall")}
-          style={[
-            styles.premiumCard,
-            {
-              backgroundColor: profile?.is_premium ? "#059669" : colors.primary,
-            },
-          ]}
-        >
-          <Ionicons
-            name={profile?.is_premium ? "checkmark-circle" : "star"}
-            size={24}
-            color="#fff"
-          />
-          <View style={styles.premiumInfo}>
-            <Text style={styles.premiumTitle}>
-              {profile?.is_premium ? "Premium ativo" : "Seja Premium"}
-            </Text>
-            <Text style={styles.premiumSub}>
-              {profile?.is_premium
-                ? "Aproveite todos os recursos ilimitados"
-                : "Gerações ilimitadas, flashcards por tópico e mais"}
-            </Text>
-          </View>
-          {!profile?.is_premium && (
-            <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
-          )}
-        </Pressable>
+        <Animated.View style={profile?.is_premium ? cardAnimStyle : undefined}>
+          <Pressable
+            onPress={() => !profile?.is_premium && router.push("/paywall")}
+            style={[
+              styles.premiumCard,
+              { backgroundColor: profile?.is_premium ? "#059669" : colors.primary },
+            ]}
+          >
+            <Ionicons
+              name={profile?.is_premium ? "checkmark-circle" : "star"}
+              size={24}
+              color="#fff"
+            />
+            <View style={styles.premiumInfo}>
+              <Text style={styles.premiumTitle}>
+                {profile?.is_premium ? "Premium ativo" : "Seja Premium"}
+              </Text>
+              <Text style={styles.premiumSub}>
+                {profile?.is_premium
+                  ? "Aproveite todos os recursos ilimitados"
+                  : "Gerações ilimitadas, flashcards por tópico e mais"}
+              </Text>
+            </View>
+            {!profile?.is_premium && (
+              <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
+            )}
+
+            {/* Shimmer overlay — only when premium */}
+            {profile?.is_premium && (
+              <Animated.View style={[styles.shimmer, shimmerAnimStyle]} />
+            )}
+          </Pressable>
+        </Animated.View>
 
         {/* Stats */}
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Estatísticas</Text>
@@ -198,6 +242,15 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     gap: 14,
     marginBottom: 28,
+    overflow: "hidden",
+  },
+  shimmer: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 70,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    borderRadius: 4,
   },
   premiumInfo: { flex: 1 },
   premiumTitle: { color: "#fff", fontSize: 16, fontWeight: "700" },

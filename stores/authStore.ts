@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
+import { initRevenueCat } from "../lib/revenuecat";
 import type { Profile } from "../types/database";
 import type { Session, User } from "@supabase/supabase-js";
 
@@ -28,6 +29,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ session, user: session?.user ?? null, loading: false });
     if (session?.user) {
       get().fetchProfile();
+      initRevenueCat(session.user.id);
     } else {
       set({ profile: null });
     }

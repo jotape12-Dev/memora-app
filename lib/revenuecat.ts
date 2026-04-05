@@ -1,5 +1,5 @@
 import { Platform } from "react-native";
-import Purchases from "react-native-purchases";
+import Purchases, { type PurchasesPackage } from "react-native-purchases";
 
 const API_KEY_IOS = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_IOS ?? "";
 
@@ -39,5 +39,37 @@ export async function getOfferings() {
     return offerings.current;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Purchase a RevenueCat package.
+ * Returns isPremium=true on success, error string on failure, or null error if user cancelled.
+ */
+export async function purchasePackage(
+  pkg: PurchasesPackage
+): Promise<{ isPremium: boolean; error: string | null }> {
+  try {
+    const { customerInfo } = await Purchases.purchasePackage(pkg);
+    const isPremium = customerInfo.entitlements.active["premium"] !== undefined;
+    return { isPremium, error: null };
+  } catch (e: unknown) {
+    if ((e as { userCancelled?: boolean }).userCancelled) {
+      return { isPremium: false, error: "cancelled" };
+    }
+    return { isPremium: false, error: "purchase_failed" };
+  }
+}
+
+/**
+ * Restore previous purchases and return premium status.
+ */
+export async function restorePurchases(): Promise<{ isPremium: boolean; error: string | null }> {
+  try {
+    const customerInfo = await Purchases.restorePurchases();
+    const isPremium = customerInfo.entitlements.active["premium"] !== undefined;
+    return { isPremium, error: null };
+  } catch {
+    return { isPremium: false, error: "restore_failed" };
   }
 }

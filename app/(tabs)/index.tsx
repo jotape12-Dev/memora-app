@@ -6,6 +6,12 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
+  Modal,
+  TextInput,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
 } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,14 +22,38 @@ import { useReviewStore } from "../../stores/reviewStore";
 import { useThemeColors } from "../../constants/theme";
 import { GenerationLimitBadge } from "../../components/GenerationLimitBadge";
 import { EmptyState } from "../../components/EmptyState";
+import { DeckCard } from "../../components/DeckCard";
+import { Button } from "../../components/Button";
+import { DeckColors } from "../../constants/colors";
 
 export default function HomeScreen() {
   const colors = useThemeColors();
   const profile = useAuthStore((s) => s.profile);
-  const { decks, fetchDecks } = useDecksStore();
+  const { decks, fetchDecks, createDeck } = useDecksStore();
   const { dueCards, fetchAllDueCards } = useDecksStore();
   const { streak, calculateStreak } = useReviewStore();
   const [refreshing, setRefreshing] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [title, setTitle] = useState("");
+  const [subject, setSubject] = useState("");
+  const [selectedColor, setSelectedColor] = useState(DeckColors[0]);
+
+  const handleCreate = async () => {
+    if (!title.trim()) {
+      Alert.alert("Erro", "Insira o nome do deck.");
+      return;
+    }
+    const deck = await createDeck(title.trim(), subject.trim() || undefined, selectedColor);
+    if (!deck) {
+      Alert.alert("Erro", "Não foi possível criar o deck. Tente novamente.");
+      return;
+    }
+    setTitle("");
+    setSubject("");
+    setSelectedColor(DeckColors[0]);
+    setShowModal(false);
+    fetchDecks();
+  };
 
   const loadData = useCallback(async () => {
     await Promise.all([fetchDecks(), fetchAllDueCards(), calculateStreak()]);
@@ -83,23 +113,29 @@ export default function HomeScreen() {
 
         {/* Stats Row */}
         <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Pressable
+            onPress={() => router.push("/streak")}
+            style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          >
             <Ionicons name="flame" size={24} color="#f59e0b" />
             <Text style={[styles.statNumber, { color: colors.text }]}>{streak}</Text>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
               {streak === 1 ? "dia" : "dias"} seguidos
             </Text>
-          </View>
+          </Pressable>
           <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Ionicons name="time" size={24} color={colors.primary} />
             <Text style={[styles.statNumber, { color: colors.text }]}>{dueCards.length}</Text>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>cards pendentes</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Pressable
+            onPress={() => router.push("/decks")}
+            style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          >
             <Ionicons name="library" size={24} color="#7c3aed" />
             <Text style={[styles.statNumber, { color: colors.text }]}>{decks.length}</Text>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>decks</Text>
-          </View>
+          </Pressable>
         </View>
 
         {/* Review Now Button */}
@@ -118,6 +154,21 @@ export default function HomeScreen() {
           </Pressable>
         )}
 
+        {/* Premium: Generate by Topic */}
+        {profile?.is_premium && (
+          <Pressable
+            onPress={() => router.push("/generate-topic")}
+            style={[styles.topicButton, { backgroundColor: colors.surface, borderColor: colors.primary }]}
+          >
+            <Ionicons name="sparkles" size={20} color={colors.primary} />
+            <View style={styles.topicButtonText}>
+              <Text style={[styles.topicButtonTitle, { color: colors.text }]}>Gerar por nome do conteúdo</Text>
+              <Text style={[styles.topicButtonSub, { color: colors.textSecondary }]}>Crie flashcards informando apenas o tópico</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+          </Pressable>
+        )}
+
         {/* Decks Section */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Meus Decks</Text>
@@ -127,34 +178,79 @@ export default function HomeScreen() {
               title="Nenhum deck ainda"
               description="Crie seu primeiro deck capturando texto de um livro ou digitando um conteúdo."
               actionLabel="Criar deck"
-              onAction={() => router.push("/capture")}
+              onAction={() => setShowModal(true)}
             />
           ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.deckScroll}>
+            <View style={styles.deckList}>
               {decks.map((deck) => (
-                <Pressable
+                <DeckCard
                   key={deck.id}
+                  deck={deck}
+                  dueCount={dueByDeck[deck.id] || 0}
                   onPress={() => router.push(`/deck/${deck.id}`)}
-                  style={[styles.deckMini, { backgroundColor: colors.surface, borderColor: deck.color }]}
-                >
-                  <View style={[styles.deckColor, { backgroundColor: deck.color }]} />
-                  <Text style={[styles.deckTitle, { color: colors.text }]} numberOfLines={1}>
-                    {deck.title}
-                  </Text>
-                  <Text style={[styles.deckCount, { color: colors.textSecondary }]}>
-                    {deck.card_count} {deck.card_count === 1 ? "card" : "cards"}
-                  </Text>
-                  {dueByDeck[deck.id] ? (
-                    <View style={[styles.dueBadge, { backgroundColor: colors.primary }]}>
-                      <Text style={styles.dueBadgeText}>{dueByDeck[deck.id]}</Text>
-                    </View>
-                  ) : null}
-                </Pressable>
+                />
               ))}
-            </ScrollView>
+            </View>
           )}
         </View>
       </ScrollView>
+
+      {/* FAB */}
+      <Pressable
+        onPress={() => setShowModal(true)}
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+      >
+        <Ionicons name="add" size={28} color="#fff" />
+      </Pressable>
+
+      {/* Create Deck Modal */}
+      <Modal visible={showModal} transparent animationType="slide">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss}>
+            <Pressable style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Novo Deck</Text>
+
+              <TextInput
+                value={title}
+                onChangeText={setTitle}
+                placeholder="Nome do deck"
+                placeholderTextColor={colors.textSecondary}
+                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+              />
+              <TextInput
+                value={subject}
+                onChangeText={setSubject}
+                placeholder="Matéria (opcional)"
+                placeholderTextColor={colors.textSecondary}
+                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+              />
+
+              <Text style={[styles.colorLabel, { color: colors.textSecondary }]}>Cor:</Text>
+              <View style={styles.colorRow}>
+                {DeckColors.map((c) => (
+                  <Pressable
+                    key={c}
+                    onPress={() => setSelectedColor(c)}
+                    style={[
+                      styles.colorDot,
+                      { backgroundColor: c },
+                      selectedColor === c && styles.colorDotSelected,
+                    ]}
+                  />
+                ))}
+              </View>
+
+              <View style={styles.modalButtons}>
+                <Button title="Cancelar" variant="ghost" onPress={() => setShowModal(false)} />
+                <Button title="Criar" onPress={handleCreate} />
+              </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -207,37 +303,82 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.8)",
     fontSize: 13,
   },
+  topicButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: 20,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    marginBottom: 20,
+  },
+  topicButtonText: { flex: 1 },
+  topicButtonTitle: { fontSize: 15, fontWeight: "600" },
+  topicButtonSub: { fontSize: 12, marginTop: 2 },
   section: { paddingHorizontal: 20 },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 12,
   },
-  deckScroll: { gap: 12, paddingRight: 20 },
-  deckMini: {
-    width: 150,
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: "hidden",
-    padding: 14,
-    paddingTop: 0,
+  deckList: {
+    gap: 0,
   },
-  deckColor: {
-    height: 4,
-    marginHorizontal: -14,
-    marginBottom: 14,
-  },
-  deckTitle: { fontSize: 14, fontWeight: "600", marginBottom: 4 },
-  deckCount: { fontSize: 12 },
-  dueBadge: {
+  fab: {
     position: "absolute",
-    top: 10,
-    right: 10,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  dueBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    gap: 12,
+  },
+  modalTitle: { fontSize: 20, fontWeight: "700", marginBottom: 4 },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+  },
+  colorLabel: { fontSize: 13, fontWeight: "500", marginTop: 4 },
+  colorRow: { flexDirection: "row", gap: 10 },
+  colorDot: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
+  colorDotSelected: {
+    borderWidth: 3,
+    borderColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 8,
+  },
 });

@@ -19,7 +19,8 @@ export function DeckCard({ deck, dueCount = 0, onPress }: DeckCardProps) {
         styles.card,
         {
           backgroundColor: colors.surface,
-          borderColor: deck.color,
+          borderColor: colors.border,
+          borderTopColor: deck.color,
         },
       ]}
     >

@@ -16,6 +16,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { useThemeColors } from "../../constants/theme";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
+import { DismissKeyboard } from "../../components/DismissKeyboard";
 
 export default function LoginScreen() {
   const colors = useThemeColors();
@@ -83,6 +84,7 @@ export default function LoginScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flex}
       >
+        <DismissKeyboard>
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
@@ -145,6 +147,7 @@ export default function LoginScreen() {
             </Link>
           </View>
         </ScrollView>
+        </DismissKeyboard>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

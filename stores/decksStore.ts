@@ -16,9 +16,10 @@ interface DecksState {
 
   // Flashcards
   flashcards: Flashcard[];
-  dueCards: Flashcard[];
+  dueCards: Flashcard[];       // all due cards across every deck
+  deckDueCards: Flashcard[];   // due cards for the currently viewed deck only
   fetchFlashcardsByDeck: (deckId: string) => Promise<void>;
-  fetchDueCards: (deckId?: string) => Promise<void>;
+  fetchDueCards: (deckId: string) => Promise<void>;
   fetchAllDueCards: () => Promise<void>;
   addFlashcard: (deckId: string, question: string, answer: string) => Promise<void>;
   addFlashcards: (deckId: string, cards: GeneratedFlashcard[]) => Promise<void>;
@@ -35,7 +36,7 @@ interface DecksState {
   clearGeneratedCards: () => void;
 }
 
-export const useDecksStore = create<DecksState>((set) => ({
+export const useDecksStore = create<DecksState>((set, get) => ({
   // ─── Decks ───────────────────────────────────────────────
   decks: [],
   loading: false,
@@ -97,6 +98,7 @@ export const useDecksStore = create<DecksState>((set) => ({
   // ─── Flashcards ──────────────────────────────────────────
   flashcards: [],
   dueCards: [],
+  deckDueCards: [],
 
   fetchFlashcardsByDeck: async (deckId) => {
     set({ loading: true });
@@ -114,21 +116,16 @@ export const useDecksStore = create<DecksState>((set) => ({
 
   fetchDueCards: async (deckId) => {
     const today = new Date().toISOString().split("T")[0];
-    let query = supabase
+    const { data, error } = await supabase
       .from("flashcards")
       .select("*")
+      .eq("deck_id", deckId)
       .lte("next_review_at", today)
       .order("next_review_at", { ascending: true })
       .limit(MAX_CARDS_PER_SESSION);
 
-    if (deckId) {
-      query = query.eq("deck_id", deckId);
-    }
-
-    const { data, error } = await query;
-
     if (!error && data) {
-      set({ dueCards: data as Flashcard[] });
+      set({ deckDueCards: data as Flashcard[] });
     }
   },
 
@@ -157,7 +154,12 @@ export const useDecksStore = create<DecksState>((set) => ({
       .single();
 
     if (!error && data) {
-      set((state) => ({ flashcards: [data as Flashcard, ...state.flashcards] }));
+      set((state) => ({
+        flashcards: [data as Flashcard, ...state.flashcards],
+        decks: state.decks.map((d) =>
+          d.id === deckId ? { ...d, card_count: d.card_count + 1 } : d
+        ),
+      }));
     }
   },
 
@@ -178,7 +180,12 @@ export const useDecksStore = create<DecksState>((set) => ({
       .select();
 
     if (!error && data) {
-      set((state) => ({ flashcards: [...(data as Flashcard[]), ...state.flashcards] }));
+      set((state) => ({
+        flashcards: [...(data as Flashcard[]), ...state.flashcards],
+        decks: state.decks.map((d) =>
+          d.id === deckId ? { ...d, card_count: d.card_count + rows.length } : d
+        ),
+      }));
     }
   },
 
@@ -192,11 +199,18 @@ export const useDecksStore = create<DecksState>((set) => ({
   },
 
   deleteFlashcard: async (id) => {
+    const card = get().flashcards.find((f) => f.id === id);
     const { error } = await supabase.from("flashcards").delete().eq("id", id);
     if (!error) {
       set((state) => ({
         flashcards: state.flashcards.filter((f) => f.id !== id),
         dueCards: state.dueCards.filter((f) => f.id !== id),
+        deckDueCards: state.deckDueCards.filter((f) => f.id !== id),
+        decks: card
+          ? state.decks.map((d) =>
+              d.id === card.deck_id ? { ...d, card_count: Math.max(0, d.card_count - 1) } : d
+            )
+          : state.decks,
       }));
     }
   },
@@ -218,6 +232,7 @@ export const useDecksStore = create<DecksState>((set) => ({
     if (!error) {
       set((state) => ({
         dueCards: state.dueCards.filter((f) => f.id !== card.id),
+        deckDueCards: state.deckDueCards.filter((f) => f.id !== card.id),
       }));
     }
   },
@@ -229,24 +244,25 @@ export const useDecksStore = create<DecksState>((set) => ({
   generateFromText: async (text, quantity = 10) => {
     set({ generating: true });
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return { error: "Not authenticated" };
+      const { data, error } = await supabase.functions.invoke<{ flashcards?: GeneratedFlashcard[]; error?: string }>(
+        "generate-from-text",
+        { body: { text, quantity } }
+      );
 
-      const response = await supabase.functions.invoke("generate-from-text", {
-        body: { text, quantity },
-      });
+      if (error) {
+        // Read actual error body from gateway/function response
+        let errMsg = "AI generation failed";
+        try {
+          const body = await (error as { context?: Response }).context?.json();
+          if (body?.error) errMsg = body.error;
+          else if (body?.message) errMsg = body.message;
+        } catch { /* ignore */ }
 
-      if (response.error) {
-        return { error: response.error.message };
+        if (errMsg === "daily_limit_reached") return { error: "daily_limit_reached" };
+        return { error: errMsg };
       }
 
-      const data = response.data;
-
-      if (data.error === "daily_limit_reached") {
-        return { error: "daily_limit_reached" };
-      }
-
-      if (data.flashcards && Array.isArray(data.flashcards)) {
+      if (data?.flashcards && Array.isArray(data.flashcards)) {
         set({ generatedCards: data.flashcards });
         return {};
       }
@@ -262,24 +278,24 @@ export const useDecksStore = create<DecksState>((set) => ({
   generateFromTopic: async (topic, quantity = 10, level = "Intermediário", language = "Português", additionalContext) => {
     set({ generating: true });
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return { error: "Not authenticated" };
+      const { data, error } = await supabase.functions.invoke<{ flashcards?: GeneratedFlashcard[]; error?: string }>(
+        "generate-from-topic",
+        { body: { topic, quantity, level, language, additionalContext } }
+      );
 
-      const response = await supabase.functions.invoke("generate-from-topic", {
-        body: { topic, quantity, level, language, additionalContext },
-      });
+      if (error) {
+        let errMsg = "AI generation failed";
+        try {
+          const body = await (error as { context?: Response }).context?.json();
+          if (body?.error) errMsg = body.error;
+          else if (body?.message) errMsg = body.message;
+        } catch { /* ignore */ }
 
-      if (response.error) {
-        return { error: response.error.message };
+        if (errMsg === "premium_required") return { error: "premium_required" };
+        return { error: errMsg };
       }
 
-      const data = response.data;
-
-      if (data.error === "premium_required") {
-        return { error: "premium_required" };
-      }
-
-      if (data.flashcards && Array.isArray(data.flashcards)) {
+      if (data?.flashcards && Array.isArray(data.flashcards)) {
         set({ generatedCards: data.flashcards });
         return {};
       }
