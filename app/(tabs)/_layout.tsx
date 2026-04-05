@@ -34,10 +34,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="capture"
-        options={{ href: null }}
-      />
-      <Tabs.Screen
         name="decks"
         options={{
           title: "Decks",

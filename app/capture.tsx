@@ -14,11 +14,11 @@ import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useThemeColors } from "../../constants/theme";
-import { useDecksStore } from "../../stores/decksStore";
-import { useAuthStore } from "../../stores/authStore";
-import { Button } from "../../components/Button";
-import { GenerationLimitBadge } from "../../components/GenerationLimitBadge";
+import { useThemeColors } from "../constants/theme";
+import { useDecksStore } from "../stores/decksStore";
+import { useAuthStore } from "../stores/authStore";
+import { Button } from "../components/Button";
+import { GenerationLimitBadge } from "../components/GenerationLimitBadge";
 
 type Tab = "camera" | "text";
 
@@ -141,7 +141,12 @@ export default function CaptureScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={[styles.title, { color: colors.text }]}>Capturar conteúdo</Text>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} hitSlop={8}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </Pressable>
+          <Text style={[styles.title, { color: colors.text }]}>Capturar conteúdo</Text>
+        </View>
         <GenerationLimitBadge />
 
         {/* Tabs */}
@@ -323,7 +328,8 @@ export default function CaptureScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40 },
-  title: { fontSize: 24, fontWeight: "700", marginBottom: 8 },
+  header: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 8 },
+  title: { fontSize: 24, fontWeight: "700" },
   tabs: {
     flexDirection: "row",
     borderRadius: 10,

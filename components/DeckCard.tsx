@@ -42,7 +42,7 @@ export function DeckCard({ deck, dueCount = 0, onPress }: DeckCardProps) {
           <View style={styles.stat}>
             <Ionicons name="layers-outline" size={14} color={colors.textSecondary} />
             <Text style={[styles.statText, { color: colors.textSecondary }]}>
-              {deck.card_count} cards
+              {deck.card_count} {deck.card_count === 1 ? "card" : "cards"}
             </Text>
           </View>
           {dueCount > 0 && (
@@ -62,12 +62,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderTopWidth: 3,
     marginBottom: 12,
+    padding: 16,
   },
-  pressable: {
-    paddingHorizontal: 18,
-    paddingTop: 16,
-    paddingBottom: 14,
-  },
+  pressable: {},
   title: {
     fontSize: 16,
     fontWeight: "600",

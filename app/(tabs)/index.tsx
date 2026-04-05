@@ -127,7 +127,7 @@ export default function HomeScreen() {
               title="Nenhum deck ainda"
               description="Crie seu primeiro deck capturando texto de um livro ou digitando um conteúdo."
               actionLabel="Criar deck"
-              onAction={() => router.push("/(tabs)/capture")}
+              onAction={() => router.push("/capture")}
             />
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.deckScroll}>
@@ -142,7 +142,7 @@ export default function HomeScreen() {
                     {deck.title}
                   </Text>
                   <Text style={[styles.deckCount, { color: colors.textSecondary }]}>
-                    {deck.card_count} cards
+                    {deck.card_count} {deck.card_count === 1 ? "card" : "cards"}
                   </Text>
                   {dueByDeck[deck.id] ? (
                     <View style={[styles.dueBadge, { backgroundColor: colors.primary }]}>

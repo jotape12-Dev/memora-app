@@ -150,7 +150,7 @@ export default function DeckDetailScreen() {
       <View style={styles.statsBar}>
         <View style={[styles.stat, { backgroundColor: colors.surface }]}>
           <Ionicons name="layers" size={16} color={colors.primary} />
-          <Text style={[styles.statText, { color: colors.text }]}>{deck.card_count} cards</Text>
+          <Text style={[styles.statText, { color: colors.text }]}>{deck.card_count} {deck.card_count === 1 ? "card" : "cards"}</Text>
         </View>
         <View style={[styles.stat, { backgroundColor: colors.surface }]}>
           <Ionicons name="time" size={16} color="#f59e0b" />
@@ -183,7 +183,7 @@ export default function DeckDetailScreen() {
             title="Nenhum flashcard"
             description="Adicione cards manualmente ou gere com IA a partir de um texto ou imagem."
             actionLabel="Gerar com IA"
-            onAction={() => router.push({ pathname: "/(tabs)/capture", params: { deckId } })}
+            onAction={() => router.push({ pathname: "/capture", params: { deckId } })}
             secondaryActionLabel="Adicionar manualmente"
             onSecondaryAction={() => setShowAddModal(true)}
           />
@@ -193,7 +193,7 @@ export default function DeckDetailScreen() {
 
       {/* FABs */}
       <Pressable
-        onPress={() => router.push({ pathname: "/(tabs)/capture", params: { deckId } })}
+        onPress={() => router.push({ pathname: "/capture", params: { deckId } })}
         style={[styles.fabSecondary, { backgroundColor: colors.surface, borderColor: colors.primary }]}
       >
         <Ionicons name="sparkles" size={22} color={colors.primary} />

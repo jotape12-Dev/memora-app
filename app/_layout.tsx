@@ -46,6 +46,7 @@ export default function RootLayout() {
           options={{ headerShown: false, gestureEnabled: false }}
         />
         <Stack.Screen name="deck/[deckId]" options={{ headerShown: false }} />
+        <Stack.Screen name="capture" options={{ headerShown: false }} />
         <Stack.Screen name="preview-cards" options={{ headerShown: false }} />
         <Stack.Screen name="generate-topic" options={{ headerShown: false }} />
         <Stack.Screen
