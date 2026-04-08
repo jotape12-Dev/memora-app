@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Pool } from "https://deno.land/x/postgres@v0.17.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,6 +19,7 @@ Deno.serve(async (req) => {
     );
   }
 
+  // Identify the calling user via their JWT
   const supabaseUser = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -32,17 +34,22 @@ Deno.serve(async (req) => {
     );
   }
 
-  const supabaseAdmin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(user.id);
-  if (error) {
+  // Delete directly from auth.users via Postgres connection (hard delete, no soft-delete)
+  const pool = new Pool(Deno.env.get("SUPABASE_DB_URL")!, 1, true);
+  try {
+    const conn = await pool.connect();
+    try {
+      await conn.queryArray("DELETE FROM auth.users WHERE id = $1", [user.id]);
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: String(err) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+  } finally {
+    await pool.end();
   }
 
   return new Response(

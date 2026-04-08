@@ -11,6 +11,7 @@ interface ReviewState {
   fetchSessions: () => Promise<void>;
   createSession: (deckId: string, cardsReviewed: number, cardsCorrect: number, durationSeconds: number) => Promise<void>;
   calculateStreak: () => Promise<number>;
+  reset: () => void;
 }
 
 export const useReviewStore = create<ReviewState>((set) => ({
@@ -103,4 +104,11 @@ export const useReviewStore = create<ReviewState>((set) => ({
     set({ streak });
     return streak;
   },
+
+  reset: () => set({
+    sessions: [],
+    streak: 0,
+    totalReviewed: 0,
+    activeDays: [],
+  }),
 }));

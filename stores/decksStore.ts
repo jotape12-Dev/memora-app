@@ -1,9 +1,16 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
-import type { Deck, Flashcard, GeneratedFlashcard, SM2Rating } from "../types/database";
+import type { Deck, Flashcard, GeneratedFlashcard, SM2Rating, ErrorDeckCard } from "../types/database";
 import { calculateSM2 } from "../lib/sm2";
 
+interface ErrorDeckRow {
+  flashcard_id: string;
+  flashcards: Flashcard;
+}
+
 const MAX_CARDS_PER_SESSION = 50;
+const ERROR_DECK_COLOR = "#a12c7b";
+const ERROR_DECK_TITLE = "Revisão Urgente";
 
 interface DecksState {
   // Decks
@@ -14,10 +21,17 @@ interface DecksState {
   updateDeck: (id: string, updates: Partial<Deck>) => Promise<void>;
   deleteDeck: (id: string) => Promise<void>;
 
+  // Error deck
+  errorDeck: Deck | null;
+  errorDeckCardCount: number;
+  ensureErrorDeck: () => Promise<Deck | null>;
+  handleErrorDeckAfterReview: (card: Flashcard, rating: SM2Rating) => Promise<void>;
+  fetchErrorDeckCount: () => Promise<void>;
+
   // Flashcards
   flashcards: Flashcard[];
-  dueCards: Flashcard[];       // all due cards across every deck
-  deckDueCards: Flashcard[];   // due cards for the currently viewed deck only
+  dueCards: Flashcard[];
+  deckDueCards: Flashcard[];
   fetchFlashcardsByDeck: (deckId: string) => Promise<void>;
   fetchDueCards: (deckId: string) => Promise<void>;
   fetchAllDueCards: () => Promise<void>;
@@ -34,6 +48,7 @@ interface DecksState {
   generateFromTopic: (topic: string, quantity?: number, level?: string, language?: string, additionalContext?: string) => Promise<{ error?: string }>;
   setGeneratedCards: (cards: GeneratedFlashcard[]) => void;
   clearGeneratedCards: () => void;
+  reset: () => void;
 }
 
 export const useDecksStore = create<DecksState>((set, get) => ({
@@ -49,7 +64,9 @@ export const useDecksStore = create<DecksState>((set, get) => ({
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      set({ decks: data as Deck[] });
+      const allDecks = data as Deck[];
+      const errDeck = allDecks.find((d) => d.is_error_deck) ?? null;
+      set({ decks: allDecks, errorDeck: errDeck });
     }
     set({ loading: false });
   },
@@ -78,6 +95,10 @@ export const useDecksStore = create<DecksState>((set, get) => ({
   },
 
   updateDeck: async (id, updates) => {
+    // Prevent renaming error deck
+    const deck = get().decks.find((d) => d.id === id);
+    if (deck?.is_error_deck && updates.title) return;
+
     const { error } = await supabase.from("decks").update(updates).eq("id", id);
     if (!error) {
       set((state) => ({
@@ -87,11 +108,135 @@ export const useDecksStore = create<DecksState>((set, get) => ({
   },
 
   deleteDeck: async (id) => {
+    // Prevent deleting error deck
+    const deck = get().decks.find((d) => d.id === id);
+    if (deck?.is_error_deck) return;
+
     const { error } = await supabase.from("decks").delete().eq("id", id);
     if (!error) {
       set((state) => ({
         decks: state.decks.filter((d) => d.id !== id),
       }));
+    }
+  },
+
+  // ─── Error Deck ─────────────────────────────────────────
+  errorDeck: null,
+  errorDeckCardCount: 0,
+
+  ensureErrorDeck: async () => {
+    const existing = get().errorDeck;
+    if (existing) return existing;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    // Check DB first
+    const { data: found } = await supabase
+      .from("decks")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("is_error_deck", true)
+      .maybeSingle();
+
+    if (found) {
+      const deck = found as Deck;
+      set({ errorDeck: deck });
+      return deck;
+    }
+
+    // Create it
+    const { data: created, error } = await supabase
+      .from("decks")
+      .insert({
+        user_id: user.id,
+        title: ERROR_DECK_TITLE,
+        color: ERROR_DECK_COLOR,
+        is_error_deck: true,
+      })
+      .select()
+      .single();
+
+    if (!error && created) {
+      const deck = created as Deck;
+      set((state) => ({ errorDeck: deck, decks: [deck, ...state.decks] }));
+      return deck;
+    }
+    return null;
+  },
+
+  handleErrorDeckAfterReview: async (card, rating) => {
+    const errDeck = await get().ensureErrorDeck();
+    if (!errDeck) return;
+    // Skip if the card is already IN the error deck
+    if (card.deck_id === errDeck.id) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    if (rating === 0 || rating === 2) {
+      // Add to error deck if not present, reset consecutive_correct
+      const { data: existing } = await supabase
+        .from("error_deck_cards")
+        .select("id")
+        .eq("flashcard_id", card.id)
+        .eq("error_deck_id", errDeck.id)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from("error_deck_cards")
+          .update({ consecutive_correct: 0 })
+          .eq("id", existing.id);
+      } else {
+        await supabase.from("error_deck_cards").insert({
+          user_id: user.id,
+          flashcard_id: card.id,
+          error_deck_id: errDeck.id,
+          consecutive_correct: 0,
+        });
+      }
+    } else if (rating === 3 || rating === 5) {
+      // Increment consecutive_correct; remove at 2
+      const { data: existing } = await supabase
+        .from("error_deck_cards")
+        .select("*")
+        .eq("flashcard_id", card.id)
+        .eq("error_deck_id", errDeck.id)
+        .maybeSingle();
+
+      if (existing) {
+        const entry = existing as ErrorDeckCard;
+        const newCount = entry.consecutive_correct + 1;
+        if (newCount >= 2) {
+          await supabase.from("error_deck_cards").delete().eq("id", entry.id);
+        } else {
+          await supabase
+            .from("error_deck_cards")
+            .update({ consecutive_correct: newCount })
+            .eq("id", entry.id);
+        }
+      }
+    }
+
+    // Refresh the count
+    get().fetchErrorDeckCount();
+  },
+
+  fetchErrorDeckCount: async () => {
+    const errDeck = get().errorDeck;
+    if (!errDeck) {
+      set({ errorDeckCardCount: 0 });
+      return;
+    }
+
+    const { count, error } = await supabase
+      .from("error_deck_cards")
+      .select("id", { count: "exact", head: true })
+      .eq("error_deck_id", errDeck.id);
+
+    if (!error && count !== null) {
+      set({ errorDeckCardCount: count });
     }
   },
 
@@ -102,6 +247,24 @@ export const useDecksStore = create<DecksState>((set, get) => ({
 
   fetchFlashcardsByDeck: async (deckId) => {
     set({ loading: true });
+
+    // Check if this is the error deck — show linked cards instead
+    const deck = get().decks.find((d) => d.id === deckId);
+    if (deck?.is_error_deck) {
+      const { data, error } = await supabase
+        .from("error_deck_cards")
+        .select("flashcard_id, flashcards(*)")
+        .eq("error_deck_id", deckId)
+        .returns<ErrorDeckRow[]>();
+
+      if (!error && data) {
+        const cards = data.map((row) => row.flashcards).filter(Boolean);
+        set({ flashcards: cards });
+      }
+      set({ loading: false });
+      return;
+    }
+
     const { data, error } = await supabase
       .from("flashcards")
       .select("*")
@@ -116,6 +279,27 @@ export const useDecksStore = create<DecksState>((set, get) => ({
 
   fetchDueCards: async (deckId) => {
     const today = new Date().toISOString().split("T")[0];
+
+    // Check if error deck — fetch due cards from linked flashcards
+    const deck = get().decks.find((d) => d.id === deckId);
+    if (deck?.is_error_deck) {
+      const { data } = await supabase
+        .from("error_deck_cards")
+        .select("flashcard_id, flashcards(*)")
+        .eq("error_deck_id", deckId)
+        .returns<ErrorDeckRow[]>();
+
+      if (data) {
+        const allLinked = data.map((row) => row.flashcards).filter(Boolean);
+        const due = allLinked
+          .filter((c) => c.next_review_at <= today)
+          .sort((a, b) => a.next_review_at.localeCompare(b.next_review_at))
+          .slice(0, MAX_CARDS_PER_SESSION);
+        set({ deckDueCards: due });
+      }
+      return;
+    }
+
     const { data, error } = await supabase
       .from("flashcards")
       .select("*")
@@ -234,6 +418,9 @@ export const useDecksStore = create<DecksState>((set, get) => ({
         dueCards: state.dueCards.filter((f) => f.id !== card.id),
         deckDueCards: state.deckDueCards.filter((f) => f.id !== card.id),
       }));
+
+      // Error deck logic — runs in background
+      get().handleErrorDeckAfterReview(card, rating);
     }
   },
 
@@ -250,7 +437,6 @@ export const useDecksStore = create<DecksState>((set, get) => ({
       );
 
       if (error) {
-        // Read actual error body from gateway/function response
         let errMsg = "AI generation failed";
         try {
           const body = await (error as { context?: Response }).context?.json();
@@ -310,4 +496,15 @@ export const useDecksStore = create<DecksState>((set, get) => ({
 
   setGeneratedCards: (cards) => set({ generatedCards: cards }),
   clearGeneratedCards: () => set({ generatedCards: [] }),
+
+  reset: () => set({
+    decks: [],
+    flashcards: [],
+    dueCards: [],
+    deckDueCards: [],
+    errorDeck: null,
+    errorDeckCardCount: 0,
+    generatedCards: [],
+    loading: false,
+  }),
 }));

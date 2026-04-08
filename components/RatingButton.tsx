@@ -10,10 +10,11 @@ interface RatingButtonProps {
   rating: SM2Rating;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
+  color: string;
   onPress: (rating: SM2Rating) => void;
 }
 
-export function RatingButton({ rating, label, icon, onPress }: RatingButtonProps) {
+export function RatingButton({ rating, label, icon, color, onPress }: RatingButtonProps) {
   const colors = useThemeColors();
   return (
     <Pressable
@@ -22,24 +23,34 @@ export function RatingButton({ rating, label, icon, onPress }: RatingButtonProps
         styles.container,
         {
           backgroundColor: colors.surface,
-          borderColor: PRIMARY,
+          borderColor: color,
           opacity: pressed ? 0.7 : 1,
         },
       ]}
     >
-      <Ionicons name={icon} size={24} color={PRIMARY} />
-      <Text style={[styles.label, { color: PRIMARY }]}>{label}</Text>
+      <Ionicons name={icon} size={24} color={color} />
+      <Text style={[styles.label, { color }]}>{label}</Text>
     </Pressable>
   );
 }
 
+const ERROR_COLOR = "#e05252";
+const SUCCESS_COLOR = "#01696f";
+
 export function RatingButtons({ onRate }: { onRate: (rating: SM2Rating) => void }) {
   return (
     <View style={styles.row}>
-      <RatingButton rating={0} label="Errei" icon="close-circle" onPress={onRate} />
-      <RatingButton rating={2} label="Difícil" icon="alert-circle" onPress={onRate} />
-      <RatingButton rating={3} label="Bom" icon="checkmark-circle" onPress={onRate} />
-      <RatingButton rating={5} label="Fácil" icon="star" onPress={onRate} />
+      {/* Esquerda — erros */}
+      <View style={styles.group}>
+        <RatingButton rating={0} label="Errei" icon="close-circle" color={ERROR_COLOR} onPress={onRate} />
+        <RatingButton rating={2} label="Difícil" icon="alert-circle" color={ERROR_COLOR} onPress={onRate} />
+      </View>
+
+      {/* Direita — acertos */}
+      <View style={styles.group}>
+        <RatingButton rating={3} label="Acertei" icon="checkmark-circle" color={SUCCESS_COLOR} onPress={onRate} />
+        <RatingButton rating={5} label="Fácil" icon="star" color={SUCCESS_COLOR} onPress={onRate} />
+      </View>
     </View>
   );
 }
@@ -47,12 +58,16 @@ export function RatingButtons({ onRate }: { onRate: (rating: SM2Rating) => void 
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    gap: 12,
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     width: "100%",
   },
+  group: {
+    flexDirection: "row",
+    gap: 8,
+  },
   container: {
-    flex: 1,
+    width: 90,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 20,

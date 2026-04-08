@@ -24,7 +24,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 export default function ReviewScreen() {
   const { deckId } = useLocalSearchParams<{ deckId: string }>();
   const colors = useThemeColors();
-  const { dueCards, fetchDueCards, reviewCard, decks } = useDecksStore();
+  const { deckDueCards, fetchDueCards, reviewCard, decks } = useDecksStore();
   const deckColor = decks.find((d) => d.id === deckId)?.color ?? "#01696f";
   const { createSession } = useReviewStore();
 
@@ -44,10 +44,10 @@ export default function ReviewScreen() {
   }, [deckId, fetchDueCards]);
 
   useEffect(() => {
-    if (dueCards.length > 0 && cards.length === 0) {
-      setCards([...dueCards]);
+    if (deckDueCards.length > 0 && cards.length === 0) {
+      setCards([...deckDueCards]);
     }
-  }, [dueCards, cards.length]);
+  }, [deckDueCards, cards.length]);
 
   const totalCards = cards.length;
   const currentCard = cards[currentIndex];

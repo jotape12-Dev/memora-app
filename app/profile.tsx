@@ -1,11 +1,16 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   ScrollView,
   Pressable,
   Alert,
+  Modal,
+  TextInput,
   StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
 } from "react-native";
 import Animated, {
   useSharedValue,
@@ -20,18 +25,23 @@ import Animated, {
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
-import { useThemeColors } from "../../constants/theme";
-import { useAuthStore } from "../../stores/authStore";
-import { useReviewStore } from "../../stores/reviewStore";
-import { useDecksStore } from "../../stores/decksStore";
-import { Button } from "../../components/Button";
+import { useThemeColors } from "../constants/theme";
+import { useAuthStore } from "../stores/authStore";
+import { useReviewStore } from "../stores/reviewStore";
+import { useDecksStore } from "../stores/decksStore";
+import { Button } from "../components/Button";
 
 export default function ProfileScreen() {
   const colors = useThemeColors();
-  const { profile, user, signOut, deleteAccount } = useAuthStore();
+  const { profile, user, signOut, deleteAccount, updateProfile } = useAuthStore();
   const { streak, totalReviewed, fetchSessions, calculateStreak } = useReviewStore();
-  const { decks } = useDecksStore();
-  const { dueCards } = useDecksStore();
+  const { decks, dueCards } = useDecksStore();
+
+  // Goal modal state
+  const [showGoalModal, setShowGoalModal] = useState(false);
+  const [goalTitle, setGoalTitle] = useState("");
+  const [goalDate, setGoalDate] = useState("");
+  const [goalSubject, setGoalSubject] = useState("");
 
   // Animations for premium card
   const cardScale = useSharedValue(0.96);
@@ -44,10 +54,7 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (profile?.is_premium) {
-      // Entrance scale pop
       cardScale.value = withSpring(1, { damping: 14, stiffness: 160 });
-
-      // Shimmer loop: slide across every ~5s
       shimmerX.value = withRepeat(
         withSequence(
           withDelay(600, withTiming(420, { duration: 2000, easing: Easing.out(Easing.quad) })),
@@ -105,10 +112,50 @@ export default function ProfileScreen() {
     );
   };
 
+  const openGoalModal = () => {
+    setGoalTitle(profile?.goal_title ?? "");
+    setGoalDate(profile?.goal_date ?? "");
+    setGoalSubject(profile?.goal_subject ?? "");
+    setShowGoalModal(true);
+  };
+
+  const handleSaveGoal = async () => {
+    await updateProfile({
+      goal_title: goalTitle.trim() || null,
+      goal_date: goalDate.trim() || null,
+      goal_subject: goalSubject.trim() || null,
+    });
+    setShowGoalModal(false);
+  };
+
+  const handleClearGoal = async () => {
+    await updateProfile({
+      goal_title: null,
+      goal_date: null,
+      goal_subject: null,
+    });
+    setShowGoalModal(false);
+  };
+
+  // Calculate days until goal
+  const daysUntilGoal = (() => {
+    if (!profile?.goal_date) return null;
+    const target = new Date(profile.goal_date + "T00:00:00");
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const diff = Math.ceil((target.getTime() - now.getTime()) / 86400000);
+    return diff;
+  })();
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={[styles.title, { color: colors.text }]}>Perfil</Text>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} hitSlop={8}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </Pressable>
+          <Text style={[styles.title, { color: colors.text }]}>Perfil</Text>
+        </View>
 
         {/* User Info */}
         <View style={[styles.userCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -159,13 +206,57 @@ export default function ProfileScreen() {
             {!profile?.is_premium && (
               <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
             )}
-
-            {/* Shimmer overlay — only when premium */}
             {profile?.is_premium && (
               <Animated.View style={[styles.shimmer, shimmerAnimStyle]} />
             )}
           </Pressable>
         </Animated.View>
+
+        {/* Goal Card */}
+        <Pressable
+          onPress={openGoalModal}
+          style={[styles.goalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          <View style={styles.goalHeader}>
+            <Ionicons name="flag" size={20} color="#7c3aed" />
+            <Text style={[styles.goalTitle, { color: colors.text }]}>Meta de Estudo</Text>
+            <Ionicons name="create-outline" size={18} color={colors.textSecondary} />
+          </View>
+          {profile?.goal_title ? (
+            <View style={styles.goalBody}>
+              <Text style={[styles.goalName, { color: colors.text }]}>{profile.goal_title}</Text>
+              {profile.goal_subject && (
+                <Text style={[styles.goalSubject, { color: colors.textSecondary }]}>
+                  {profile.goal_subject}
+                </Text>
+              )}
+              {daysUntilGoal !== null && (
+                <View style={[styles.goalCountdown, {
+                  backgroundColor: daysUntilGoal <= 7 ? "#fef2f2" : "#f0fdf4",
+                }]}>
+                  <Ionicons
+                    name="calendar"
+                    size={14}
+                    color={daysUntilGoal <= 7 ? "#dc2626" : "#16a34a"}
+                  />
+                  <Text style={[styles.goalCountdownText, {
+                    color: daysUntilGoal <= 7 ? "#dc2626" : "#16a34a",
+                  }]}>
+                    {daysUntilGoal <= 0
+                      ? "Hoje é o dia!"
+                      : daysUntilGoal === 1
+                        ? "Falta 1 dia"
+                        : `Faltam ${daysUntilGoal} dias`}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            <Text style={[styles.goalEmpty, { color: colors.textSecondary }]}>
+              Defina uma meta para manter o foco nos estudos
+            </Text>
+          )}
+        </Pressable>
 
         {/* Stats */}
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Estatísticas</Text>
@@ -206,6 +297,57 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
       </ScrollView>
+
+      {/* Goal Edit Modal */}
+      <Modal visible={showGoalModal} transparent animationType="slide">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss}>
+            <Pressable style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Meta de Estudo</Text>
+
+              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Objetivo</Text>
+              <TextInput
+                value={goalTitle}
+                onChangeText={setGoalTitle}
+                placeholder="Ex: Passar na prova de cálculo"
+                placeholderTextColor={colors.textSecondary}
+                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Matéria (opcional)</Text>
+              <TextInput
+                value={goalSubject}
+                onChangeText={setGoalSubject}
+                placeholder="Ex: Matemática"
+                placeholderTextColor={colors.textSecondary}
+                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Data (AAAA-MM-DD)</Text>
+              <TextInput
+                value={goalDate}
+                onChangeText={setGoalDate}
+                placeholder="Ex: 2026-06-15"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="numbers-and-punctuation"
+                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+              />
+
+              <View style={styles.modalButtons}>
+                {profile?.goal_title && (
+                  <Button title="Limpar" variant="ghost" onPress={handleClearGoal} />
+                )}
+                <View style={{ flex: 1 }} />
+                <Button title="Cancelar" variant="ghost" onPress={() => setShowGoalModal(false)} />
+                <Button title="Salvar" onPress={handleSaveGoal} />
+              </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -213,7 +355,13 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40 },
-  title: { fontSize: 24, fontWeight: "700", marginBottom: 20 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 20,
+  },
+  title: { fontSize: 24, fontWeight: "700" },
   userCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -241,7 +389,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 14,
     gap: 14,
-    marginBottom: 28,
+    marginBottom: 16,
     overflow: "hidden",
   },
   shimmer: {
@@ -255,6 +403,34 @@ const styles = StyleSheet.create({
   premiumInfo: { flex: 1 },
   premiumTitle: { color: "#fff", fontSize: 16, fontWeight: "700" },
   premiumSub: { color: "rgba(255,255,255,0.85)", fontSize: 12, marginTop: 2 },
+  goalCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 28,
+  },
+  goalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  goalTitle: { fontSize: 15, fontWeight: "600", flex: 1 },
+  goalBody: { gap: 4 },
+  goalName: { fontSize: 16, fontWeight: "700" },
+  goalSubject: { fontSize: 13 },
+  goalCountdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 8,
+    alignSelf: "flex-start",
+  },
+  goalCountdownText: { fontSize: 13, fontWeight: "600" },
+  goalEmpty: { fontSize: 13 },
   sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12 },
   statsGrid: {
     flexDirection: "row",
@@ -282,4 +458,30 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   deleteText: { fontSize: 14 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    gap: 8,
+  },
+  modalTitle: { fontSize: 20, fontWeight: "700", marginBottom: 8 },
+  inputLabel: { fontSize: 13, fontWeight: "500", marginTop: 4 },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+  },
 });

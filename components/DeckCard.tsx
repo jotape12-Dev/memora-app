@@ -12,6 +12,7 @@ interface DeckCardProps {
 
 export function DeckCard({ deck, dueCount = 0, onPress }: DeckCardProps) {
   const colors = useThemeColors();
+  const isError = deck.is_error_deck;
 
   return (
     <View
@@ -31,9 +32,14 @@ export function DeckCard({ deck, dueCount = 0, onPress }: DeckCardProps) {
           { opacity: pressed ? 0.7 : 1 },
         ]}
       >
-        <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-          {deck.title}
-        </Text>
+        <View style={styles.titleRow}>
+          {isError && (
+            <Ionicons name="alert-circle" size={18} color={deck.color} />
+          )}
+          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+            {deck.title}
+          </Text>
+        </View>
         {deck.subject ? (
           <Text style={[styles.subject, { color: colors.textSecondary }]} numberOfLines={1}>
             {deck.subject}
@@ -47,7 +53,7 @@ export function DeckCard({ deck, dueCount = 0, onPress }: DeckCardProps) {
             </Text>
           </View>
           {dueCount > 0 && (
-            <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+            <View style={[styles.badge, { backgroundColor: isError ? deck.color : colors.primary }]}>
               <Text style={styles.badgeText}>{dueCount} pendentes</Text>
             </View>
           )}
@@ -66,10 +72,16 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   pressable: {},
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 6,
+  },
   title: {
     fontSize: 16,
     fontWeight: "600",
-    marginBottom: 6,
+    flex: 1,
   },
   subject: {
     fontSize: 13,

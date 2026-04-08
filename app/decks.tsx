@@ -26,7 +26,7 @@ import type { Deck } from "../types/database";
 
 export default function DecksScreen() {
   const colors = useThemeColors();
-  const { decks, dueCards, fetchDecks, createDeck } = useDecksStore();
+  const { decks, dueCards, fetchDecks, fetchAllDueCards, createDeck } = useDecksStore();
 
   const [search, setSearch] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -40,19 +40,26 @@ export default function DecksScreen() {
     return acc;
   }, {});
 
+  // Sort error deck to top
+  const sortedDecks = [...decks].sort((a, b) => {
+    if (a.is_error_deck && !b.is_error_deck) return -1;
+    if (!a.is_error_deck && b.is_error_deck) return 1;
+    return 0;
+  });
+
   const filtered = search.trim()
-    ? decks.filter(
+    ? sortedDecks.filter(
         (d) =>
           d.title.toLowerCase().includes(search.toLowerCase()) ||
           d.subject?.toLowerCase().includes(search.toLowerCase())
       )
-    : decks;
+    : sortedDecks;
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchDecks();
+    await Promise.all([fetchDecks(), fetchAllDueCards()]);
     setRefreshing(false);
-  }, [fetchDecks]);
+  }, [fetchDecks, fetchAllDueCards]);
 
   const handleCreate = async () => {
     if (!title.trim()) {

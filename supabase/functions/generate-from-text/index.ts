@@ -1,3 +1,4 @@
+// @verify_jwt: false
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
@@ -136,12 +137,20 @@ Retorne exatamente neste formato JSON (nada mais):
       });
     }
 
+    // Strip markdown code blocks that some models add despite instructions
+    const cleaned = content
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```\s*$/, "")
+      .trim();
+
     let parsed;
     try {
-      parsed = JSON.parse(content);
+      parsed = JSON.parse(cleaned);
     } catch {
-      const jsonMatch = content.match(/\{[\s\S]*"flashcards"[\s\S]*\}/);
+      // Fallback: extract JSON object via regex
+      const jsonMatch = cleaned.match(/\{[\s\S]*"flashcards"[\s\S]*\}/);
       if (!jsonMatch) {
+        console.error("Raw AI content:", content.substring(0, 500));
         return new Response(JSON.stringify({ error: "Failed to parse AI response" }), {
           status: 500,
           headers: corsHeaders,

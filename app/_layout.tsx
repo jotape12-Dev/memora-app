@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as SplashScreen from "expo-splash-screen";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../stores/authStore";
+import { usePremium } from "../hooks/usePremium";
 import { Colors } from "../constants/colors";
 import "../global.css";
 
@@ -15,6 +16,9 @@ export default function RootLayout() {
   const scheme = useColorScheme();
   const colors = scheme === "dark" ? Colors.dark : Colors.light;
   const setSession = useAuthStore((s) => s.setSession);
+
+  // Sync RevenueCat premium status
+  usePremium();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -49,6 +53,7 @@ export default function RootLayout() {
         <Stack.Screen name="capture" options={{ headerShown: false }} />
         <Stack.Screen name="preview-cards" options={{ headerShown: false }} />
         <Stack.Screen name="generate-topic" options={{ headerShown: false }} />
+        <Stack.Screen name="profile" options={{ headerShown: false }} />
         <Stack.Screen
           name="paywall"
           options={{ headerShown: false, presentation: "modal" }}

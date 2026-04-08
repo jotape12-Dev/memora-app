@@ -12,16 +12,17 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  ActivityIndicator,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "../../constants/theme";
 import { useDecksStore } from "../../stores/decksStore";
+import { supabase } from "../../lib/supabase";
 import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
-import { DismissKeyboard } from "../../components/DismissKeyboard";
-import type { Flashcard } from "../../types/database";
+import type { Flashcard, DeckStats } from "../../types/database";
 
 export default function DeckDetailScreen() {
   const { deckId } = useLocalSearchParams<{ deckId: string }>();
@@ -41,24 +42,39 @@ export default function DeckDetailScreen() {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [stats, setStats] = useState<DeckStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [showStats, setShowStats] = useState(false);
 
   const deck = decks.find((d) => d.id === deckId);
+  const isErrorDeck = deck?.is_error_deck ?? false;
   const dueCount = deckDueCards.length;
+
+  const fetchStats = useCallback(async () => {
+    if (!deckId) return;
+    setStatsLoading(true);
+    const { data, error } = await supabase.rpc("get_deck_stats", { p_deck_id: deckId });
+    if (!error && data) {
+      setStats(data as DeckStats);
+    }
+    setStatsLoading(false);
+  }, [deckId]);
 
   useEffect(() => {
     if (deckId) {
       fetchFlashcardsByDeck(deckId);
       fetchDueCards(deckId);
+      fetchStats();
     }
-  }, [deckId, fetchFlashcardsByDeck, fetchDueCards]);
+  }, [deckId, fetchFlashcardsByDeck, fetchDueCards, fetchStats]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     if (deckId) {
-      await Promise.all([fetchFlashcardsByDeck(deckId), fetchDueCards(deckId)]);
+      await Promise.all([fetchFlashcardsByDeck(deckId), fetchDueCards(deckId), fetchStats()]);
     }
     setRefreshing(false);
-  }, [deckId, fetchFlashcardsByDeck, fetchDueCards]);
+  }, [deckId, fetchFlashcardsByDeck, fetchDueCards, fetchStats]);
 
   const handleAddCard = async () => {
     if (!question.trim() || !answer.trim()) {
@@ -79,6 +95,7 @@ export default function DeckDetailScreen() {
   };
 
   const handleDeleteDeck = () => {
+    if (isErrorDeck) return;
     Alert.alert(
       "Excluir deck?",
       "Todos os flashcards deste deck serão excluídos permanentemente.",
@@ -112,11 +129,112 @@ export default function DeckDetailScreen() {
           </Text>
         </View>
         {isDue && (
-          <View style={[styles.dueIndicator, { backgroundColor: colors.primary }]}>
+          <View style={[styles.dueIndicator, { backgroundColor: isErrorDeck ? deck?.color : colors.primary }]}>
             <Text style={styles.dueText}>Pendente</Text>
           </View>
         )}
       </Pressable>
+    );
+  };
+
+  // Build 7-day chart bars
+  const maxBarHeight = 48;
+  const weekDays = buildWeekChart(stats?.daily_stats ?? []);
+  const maxCount = Math.max(...weekDays.map((d) => d.count), 1);
+
+  const renderStatsSection = () => {
+    if (statsLoading && !stats) {
+      return (
+        <View style={styles.statsLoadingContainer}>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+      );
+    }
+    if (!stats) return null;
+
+    return (
+      <View style={styles.statsSection}>
+        <Pressable
+          onPress={() => setShowStats((v) => !v)}
+          style={[styles.statsToggle, { borderColor: colors.border }]}
+        >
+          <Ionicons name="stats-chart" size={18} color={colors.primary} />
+          <Text style={[styles.statsToggleText, { color: colors.text }]}>Estatísticas</Text>
+          <Ionicons
+            name={showStats ? "chevron-up" : "chevron-down"}
+            size={18}
+            color={colors.textSecondary}
+          />
+        </Pressable>
+
+        {showStats && (
+          <View style={[styles.statsContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {/* KPI row */}
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiItem}>
+                <Text style={[styles.kpiValue, { color: colors.text }]}>{stats.total_reviews}</Text>
+                <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>Revisões</Text>
+              </View>
+              <View style={[styles.kpiDivider, { backgroundColor: colors.border }]} />
+              <View style={styles.kpiItem}>
+                <Text style={[styles.kpiValue, { color: colors.text }]}>{stats.accuracy}%</Text>
+                <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>Precisão</Text>
+              </View>
+              <View style={[styles.kpiDivider, { backgroundColor: colors.border }]} />
+              <View style={styles.kpiItem}>
+                <Text style={[styles.kpiValue, { color: colors.text }]}>{stats.total_correct}</Text>
+                <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>Acertos</Text>
+              </View>
+            </View>
+
+            {/* 7-day chart */}
+            <Text style={[styles.chartTitle, { color: colors.textSecondary }]}>Últimos 7 dias</Text>
+            <View style={styles.chartRow}>
+              {weekDays.map((day) => (
+                <View key={day.label} style={styles.chartCol}>
+                  <View
+                    style={[
+                      styles.chartBar,
+                      {
+                        height: day.count > 0 ? Math.max((day.count / maxCount) * maxBarHeight, 4) : 4,
+                        backgroundColor: day.count > 0 ? colors.primary : colors.border,
+                        borderRadius: 3,
+                      },
+                    ]}
+                  />
+                  <Text style={[styles.chartLabel, { color: colors.textSecondary }]}>{day.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Hardest cards */}
+            {stats.hardest_cards.length > 0 && (
+              <>
+                <Text style={[styles.chartTitle, { color: colors.textSecondary, marginTop: 16 }]}>
+                  Cards mais difíceis
+                </Text>
+                {stats.hardest_cards.map((card) => (
+                  <View
+                    key={card.id}
+                    style={[styles.hardCard, { borderColor: colors.border }]}
+                  >
+                    <Ionicons name="warning" size={14} color={colors.error} />
+                    <Text
+                      style={[styles.hardCardText, { color: colors.text }]}
+                      numberOfLines={1}
+                    >
+                      {card.question}
+                    </Text>
+                    <Text style={[styles.hardCardEase, { color: colors.textSecondary }]}>
+                      {card.ease_factor.toFixed(1)}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
+        )}
+      </View>
     );
   };
 
@@ -138,23 +256,32 @@ export default function DeckDetailScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
         <View style={styles.headerCenter}>
-          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-            {deck.title}
-          </Text>
+          <View style={styles.titleRow}>
+            {isErrorDeck && (
+              <Ionicons name="alert-circle" size={20} color={deck.color} />
+            )}
+            <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+              {deck.title}
+            </Text>
+          </View>
           {deck.subject && (
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{deck.subject}</Text>
           )}
         </View>
-        <Pressable onPress={handleDeleteDeck}>
-          <Ionicons name="trash-outline" size={22} color={colors.error} />
-        </Pressable>
+        {!isErrorDeck && (
+          <Pressable onPress={handleDeleteDeck}>
+            <Ionicons name="trash-outline" size={22} color={colors.error} />
+          </Pressable>
+        )}
       </View>
 
       {/* Stats Bar */}
       <View style={styles.statsBar}>
         <View style={[styles.stat, { backgroundColor: colors.surface }]}>
           <Ionicons name="layers" size={16} color={colors.primary} />
-          <Text style={[styles.statText, { color: colors.text }]}>{deck.card_count} {deck.card_count === 1 ? "card" : "cards"}</Text>
+          <Text style={[styles.statText, { color: colors.text }]}>
+            {isErrorDeck ? flashcards.length : deck.card_count} {(isErrorDeck ? flashcards.length : deck.card_count) === 1 ? "card" : "cards"}
+          </Text>
         </View>
         <View style={[styles.stat, { backgroundColor: colors.surface }]}>
           <Ionicons name="time" size={16} color="#f59e0b" />
@@ -173,6 +300,9 @@ export default function DeckDetailScreen() {
         </View>
       )}
 
+      {/* Deck Stats (Feature 2) */}
+      {renderStatsSection()}
+
       {/* Cards List */}
       <FlatList
         data={flashcards}
@@ -182,32 +312,44 @@ export default function DeckDetailScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
         ListEmptyComponent={
-          <EmptyState
-            icon="document-text-outline"
-            title="Nenhum flashcard"
-            description="Adicione cards manualmente ou gere com IA a partir de um texto ou imagem."
-            actionLabel="Gerar com IA"
-            onAction={() => router.push({ pathname: "/capture", params: { deckId } })}
-            secondaryActionLabel="Adicionar manualmente"
-            onSecondaryAction={() => setShowAddModal(true)}
-          />
+          isErrorDeck ? (
+            <EmptyState
+              icon="checkmark-circle-outline"
+              title="Nenhum card com erro"
+              description="Cards que você errar durante as revisões aparecerão aqui automaticamente."
+            />
+          ) : (
+            <EmptyState
+              icon="document-text-outline"
+              title="Nenhum flashcard"
+              description="Adicione cards manualmente ou gere com IA a partir de um texto ou imagem."
+              actionLabel="Gerar com IA"
+              onAction={() => router.push({ pathname: "/capture", params: { deckId } })}
+              secondaryActionLabel="Adicionar manualmente"
+              onSecondaryAction={() => setShowAddModal(true)}
+            />
+          )
         }
         renderItem={renderCard}
       />
 
-      {/* FABs */}
-      <Pressable
-        onPress={() => router.push({ pathname: "/capture", params: { deckId } })}
-        style={[styles.fabSecondary, { backgroundColor: colors.surface, borderColor: colors.primary }]}
-      >
-        <Ionicons name="sparkles" size={22} color={colors.primary} />
-      </Pressable>
-      <Pressable
-        onPress={() => setShowAddModal(true)}
-        style={[styles.fab, { backgroundColor: colors.primary }]}
-      >
-        <Ionicons name="add" size={28} color="#fff" />
-      </Pressable>
+      {/* FABs — hide for error deck */}
+      {!isErrorDeck && (
+        <>
+          <Pressable
+            onPress={() => router.push({ pathname: "/capture", params: { deckId } })}
+            style={[styles.fabSecondary, { backgroundColor: colors.surface, borderColor: colors.primary }]}
+          >
+            <Ionicons name="sparkles" size={22} color={colors.primary} />
+          </Pressable>
+          <Pressable
+            onPress={() => setShowAddModal(true)}
+            style={[styles.fab, { backgroundColor: colors.primary }]}
+          >
+            <Ionicons name="add" size={28} color="#fff" />
+          </Pressable>
+        </>
+      )}
 
       {/* Add Card Modal */}
       <Modal visible={showAddModal} transparent animationType="slide">
@@ -246,6 +388,23 @@ export default function DeckDetailScreen() {
   );
 }
 
+function buildWeekChart(dailyStats: Array<{ date: string; count: number }>): Array<{ label: string; count: number }> {
+  const dayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  const result: Array<{ label: string; count: number }> = [];
+  const statsMap = new Map(dailyStats.map((s) => [s.date, s.count]));
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().split("T")[0];
+    result.push({
+      label: dayLabels[d.getDay()],
+      count: statsMap.get(key) ?? 0,
+    });
+  }
+  return result;
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
@@ -257,7 +416,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headerCenter: { flex: 1 },
-  title: { fontSize: 20, fontWeight: "700" },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  title: { fontSize: 20, fontWeight: "700", flex: 1 },
   subtitle: { fontSize: 13, marginTop: 2 },
   statsBar: {
     flexDirection: "row",
@@ -275,6 +439,52 @@ const styles = StyleSheet.create({
   },
   statText: { fontSize: 13, fontWeight: "500" },
   reviewSection: { paddingHorizontal: 20, marginBottom: 12 },
+  // Stats section
+  statsSection: { paddingHorizontal: 20, marginBottom: 12 },
+  statsToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+  },
+  statsToggleText: { flex: 1, fontSize: 15, fontWeight: "600" },
+  statsLoadingContainer: { paddingHorizontal: 20, paddingVertical: 16, alignItems: "center" },
+  statsContent: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    marginTop: 4,
+  },
+  kpiRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    marginBottom: 16,
+  },
+  kpiItem: { alignItems: "center", flex: 1 },
+  kpiValue: { fontSize: 20, fontWeight: "700" },
+  kpiLabel: { fontSize: 11, marginTop: 2 },
+  kpiDivider: { width: 1, height: 32 },
+  chartTitle: { fontSize: 12, fontWeight: "500", marginBottom: 8 },
+  chartRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    height: 64,
+  },
+  chartCol: { alignItems: "center", flex: 1, gap: 4 },
+  chartBar: { width: 20 },
+  chartLabel: { fontSize: 10 },
+  hardCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+    borderBottomWidth: 0.5,
+  },
+  hardCardText: { flex: 1, fontSize: 13 },
+  hardCardEase: { fontSize: 12 },
+  // Cards list
   list: { paddingHorizontal: 20, paddingBottom: 100 },
   cardItem: {
     flexDirection: "row",

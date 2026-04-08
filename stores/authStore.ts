@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
-import { initRevenueCat } from "../lib/revenuecat";
+import { initRevenueCat, logOutRevenueCat } from "../lib/revenuecat";
+import { useDecksStore } from "./decksStore";
+import { useReviewStore } from "./reviewStore";
 import type { Profile } from "../types/database";
 import type { Session, User } from "@supabase/supabase-js";
 
@@ -95,15 +97,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    await logOutRevenueCat();
     await supabase.auth.signOut();
     set({ session: null, user: null, profile: null });
+    useDecksStore.getState().reset();
+    useReviewStore.getState().reset();
   },
 
   deleteAccount: async () => {
     const { error } = await supabase.functions.invoke("delete-account");
     if (error) return { error: error.message };
+    await logOutRevenueCat();
     await supabase.auth.signOut();
     set({ session: null, user: null, profile: null });
+    useDecksStore.getState().reset();
+    useReviewStore.getState().reset();
     return { error: null };
   },
 }));

@@ -7,6 +7,7 @@ import {
   Alert,
   ActivityIndicator,
   StyleSheet,
+  Linking,
 } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -14,7 +15,12 @@ import { Ionicons } from "@expo/vector-icons";
 import type { PurchasesPackage } from "react-native-purchases";
 import { useThemeColors } from "../constants/theme";
 import { useAuthStore } from "../stores/authStore";
-import { getOfferings, purchasePackage, restorePurchases } from "../lib/revenuecat";
+import {
+  isRevenueCatAvailable,
+  getOfferings,
+  purchasePackage,
+  restorePurchases,
+} from "../lib/revenuecat";
 import { Button } from "../components/Button";
 
 type Plan = "monthly" | "annual";
@@ -26,6 +32,9 @@ const FEATURES = [
   { icon: "sync" as const, text: "Sincronização entre dispositivos" },
 ];
 
+const TERMS_URL = "https://west-countess-f4d.notion.site/Termos-de-Uso-EULA-33bc6b9cebbe804cb189d1bd4245201c?source=copy_link";
+const PRIVACY_URL = "https://west-countess-f4d.notion.site/Pol-tica-de-Privacidade-Memora-33bc6b9cebbe80cea7abcf49d1f8c4b7?source=copy_link";
+
 export default function PaywallScreen() {
   const colors = useThemeColors();
   const { updateProfile, fetchProfile } = useAuthStore();
@@ -35,6 +44,7 @@ export default function PaywallScreen() {
   const [monthlyPackage, setMonthlyPackage] = useState<PurchasesPackage | null>(null);
   const [annualPackage, setAnnualPackage] = useState<PurchasesPackage | null>(null);
   const [offeringsLoading, setOfferingsLoading] = useState(true);
+  const [rcAvailable] = useState(() => isRevenueCatAvailable());
 
   useEffect(() => {
     loadOfferings();
@@ -45,10 +55,11 @@ export default function PaywallScreen() {
     const offering = await getOfferings();
     if (offering) {
       for (const pkg of offering.availablePackages) {
+        const id = pkg.identifier.toLowerCase();
         const type = pkg.packageType;
-        if (type === "ANNUAL" || pkg.identifier.toLowerCase().includes("annual") || pkg.identifier.toLowerCase().includes("anual")) {
+        if (type === "ANNUAL" || id.includes("annual") || id.includes("anual")) {
           setAnnualPackage(pkg);
-        } else if (type === "MONTHLY" || pkg.identifier.toLowerCase().includes("monthly") || pkg.identifier.toLowerCase().includes("mensal")) {
+        } else if (type === "MONTHLY" || id.includes("monthly") || id.includes("mensal")) {
           setMonthlyPackage(pkg);
         }
       }
@@ -69,11 +80,18 @@ export default function PaywallScreen() {
   const handlePurchase = async () => {
     const pkg = selectedPlan === "annual" ? annualPackage : monthlyPackage;
 
-    // RevenueCat not configured or no offerings — activate directly (dev/sandbox mode)
     if (!pkg) {
-      setLoading(true);
-      await activatePremium();
-      setLoading(false);
+      if (!rcAvailable) {
+        Alert.alert(
+          "Indisponível",
+          "O sistema de pagamentos não está disponível neste ambiente. Use um build de desenvolvimento ou produção."
+        );
+      } else {
+        Alert.alert(
+          "Plano indisponível",
+          "Não foi possível carregar este plano. Tente novamente."
+        );
+      }
       return;
     }
 
@@ -99,6 +117,11 @@ export default function PaywallScreen() {
   };
 
   const handleRestore = async () => {
+    if (!rcAvailable) {
+      Alert.alert("Indisponível", "Restauração não disponível neste ambiente.");
+      return;
+    }
+
     setRestoring(true);
     const { isPremium, error } = await restorePurchases();
 
@@ -111,11 +134,16 @@ export default function PaywallScreen() {
     if (isPremium) {
       await activatePremium();
     } else {
-      Alert.alert("Sem assinatura ativa", "Não encontramos nenhuma assinatura Premium associada a esta conta Apple.");
+      Alert.alert(
+        "Sem assinatura ativa",
+        "Não encontramos nenhuma assinatura Premium associada a esta conta."
+      );
     }
 
     setRestoring(false);
   };
+
+  const hasPackages = monthlyPackage !== null || annualPackage !== null;
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -151,47 +179,64 @@ export default function PaywallScreen() {
         {/* Plans */}
         {offeringsLoading ? (
           <ActivityIndicator color={colors.primary} style={{ marginBottom: 24 }} />
+        ) : !hasPackages ? (
+          <View style={[styles.unavailableCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Ionicons name="information-circle-outline" size={20} color={colors.textSecondary} />
+            <Text style={[styles.unavailableText, { color: colors.textSecondary }]}>
+              {rcAvailable
+                ? "Planos indisponíveis no momento. Tente novamente mais tarde."
+                : "Pagamentos não disponíveis neste ambiente. Use um build de produção."}
+            </Text>
+          </View>
         ) : (
           <View style={styles.plans}>
-            <Pressable
-              onPress={() => setSelectedPlan("annual")}
-              style={[
-                styles.planCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: selectedPlan === "annual" ? colors.primary : colors.border,
-                  borderWidth: selectedPlan === "annual" ? 2 : 1,
-                },
-              ]}
-            >
-              <View style={[styles.saveBadge, { backgroundColor: "#dcfce7" }]}>
-                <Text style={styles.saveText}>Economize 44%</Text>
-              </View>
-              <Text style={[styles.planName, { color: colors.text }]}>Anual</Text>
-              <Text style={[styles.planPrice, { color: colors.text }]}>
-                {annualPackage?.product.priceString ?? "R$ 99,90"}
-                <Text style={styles.planPeriod}>/ano</Text>
-              </Text>
-              <Text style={[styles.planMonthly, { color: colors.textSecondary }]}>R$ 8,33/mês</Text>
-            </Pressable>
+            {annualPackage && (
+              <Pressable
+                onPress={() => setSelectedPlan("annual")}
+                style={[
+                  styles.planCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: selectedPlan === "annual" ? colors.primary : colors.border,
+                    borderWidth: selectedPlan === "annual" ? 2 : 1,
+                  },
+                ]}
+              >
+                <View style={[styles.saveBadge, { backgroundColor: "#dcfce7" }]}>
+                  <Text style={styles.saveText}>Economize 44%</Text>
+                </View>
+                <Text style={[styles.planName, { color: colors.text }]}>Anual</Text>
+                <Text style={[styles.planPrice, { color: colors.text }]}>
+                  {annualPackage.product.priceString}
+                  <Text style={styles.planPeriod}>/ano</Text>
+                </Text>
+                <Text style={[styles.planMonthly, { color: colors.textSecondary }]}>
+                  {annualPackage.product.price
+                    ? `R$ ${(annualPackage.product.price / 12).toFixed(2).replace(".", ",")}/mês`
+                    : ""}
+                </Text>
+              </Pressable>
+            )}
 
-            <Pressable
-              onPress={() => setSelectedPlan("monthly")}
-              style={[
-                styles.planCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: selectedPlan === "monthly" ? colors.primary : colors.border,
-                  borderWidth: selectedPlan === "monthly" ? 2 : 1,
-                },
-              ]}
-            >
-              <Text style={[styles.planName, { color: colors.text }]}>Mensal</Text>
-              <Text style={[styles.planPrice, { color: colors.text }]}>
-                {monthlyPackage?.product.priceString ?? "R$ 14,90"}
-                <Text style={styles.planPeriod}>/mês</Text>
-              </Text>
-            </Pressable>
+            {monthlyPackage && (
+              <Pressable
+                onPress={() => setSelectedPlan("monthly")}
+                style={[
+                  styles.planCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: selectedPlan === "monthly" ? colors.primary : colors.border,
+                    borderWidth: selectedPlan === "monthly" ? 2 : 1,
+                  },
+                ]}
+              >
+                <Text style={[styles.planName, { color: colors.text }]}>Mensal</Text>
+                <Text style={[styles.planPrice, { color: colors.text }]}>
+                  {monthlyPackage.product.priceString}
+                  <Text style={styles.planPeriod}>/mês</Text>
+                </Text>
+              </Pressable>
+            )}
           </View>
         )}
 
@@ -200,12 +245,14 @@ export default function PaywallScreen() {
           title={`Assinar ${selectedPlan === "annual" ? "Anual" : "Mensal"}`}
           onPress={handlePurchase}
           loading={loading}
-          disabled={offeringsLoading}
+          disabled={offeringsLoading || !hasPackages}
           icon={<Ionicons name="star" size={18} color="#fff" />}
         />
 
+        {/* Terms */}
         <Text style={[styles.terms, { color: colors.textSecondary }]}>
-          Cancele a qualquer momento. A assinatura é renovada automaticamente.
+          Cancele a qualquer momento. A assinatura é renovada automaticamente ao final de cada período.
+          O pagamento será cobrado na sua conta Apple/Google.
         </Text>
 
         {/* Restore */}
@@ -218,6 +265,17 @@ export default function PaywallScreen() {
             </Text>
           )}
         </Pressable>
+
+        {/* Legal links — required by Apple */}
+        <View style={styles.legalRow}>
+          <Pressable onPress={() => Linking.openURL(TERMS_URL)}>
+            <Text style={[styles.legalText, { color: colors.textSecondary }]}>Termos de Uso</Text>
+          </Pressable>
+          <Text style={[styles.legalDot, { color: colors.textSecondary }]}>·</Text>
+          <Pressable onPress={() => Linking.openURL(PRIVACY_URL)}>
+            <Text style={[styles.legalText, { color: colors.textSecondary }]}>Política de Privacidade</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -314,10 +372,25 @@ const styles = StyleSheet.create({
   planMonthly: {
     fontSize: 12,
   },
+  unavailableCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 24,
+  },
+  unavailableText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
   terms: {
     fontSize: 11,
     textAlign: "center",
     marginTop: 16,
+    lineHeight: 16,
   },
   restoreBtn: {
     alignItems: "center",
@@ -326,5 +399,18 @@ const styles = StyleSheet.create({
   restoreText: {
     fontSize: 13,
     textDecorationLine: "underline",
+  },
+  legalRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  legalText: {
+    fontSize: 12,
+    textDecorationLine: "underline",
+  },
+  legalDot: {
+    fontSize: 12,
   },
 });
