@@ -211,8 +211,11 @@ export default function PaywallScreen() {
                   <Text style={styles.planPeriod}>/ano</Text>
                 </Text>
                 <Text style={[styles.planMonthly, { color: colors.textSecondary }]}>
-                  {annualPackage.product.price
-                    ? `R$ ${(annualPackage.product.price / 12).toFixed(2).replace(".", ",")}/mês`
+                  {annualPackage.product.price && annualPackage.product.currencyCode
+                    ? `${new Intl.NumberFormat("pt-BR", {
+                        style: "currency",
+                        currency: annualPackage.product.currencyCode,
+                      }).format(annualPackage.product.price / 12)}/mês`
                     : ""}
                 </Text>
               </Pressable>
