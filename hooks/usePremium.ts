@@ -21,7 +21,7 @@ export function usePremium() {
 
     // Check once on mount
     checkPremiumStatus().then((rcPremium) => {
-      if (rcPremium !== profile.is_premium) {
+      if (rcPremium !== null && rcPremium !== profile.is_premium) {
         updateProfile({ is_premium: rcPremium });
       }
     });

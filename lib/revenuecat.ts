@@ -59,8 +59,8 @@ export function onCustomerInfoUpdated(
 /**
  * Check if the current user has an active premium entitlement.
  */
-export async function checkPremiumStatus(): Promise<boolean> {
-  if (!isRevenueCatAvailable()) return false;
+export async function checkPremiumStatus(): Promise<boolean | null> {
+  if (!isRevenueCatAvailable()) return null;
 
   try {
     const customerInfo = await Purchases.getCustomerInfo();
