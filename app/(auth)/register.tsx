@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../stores/authStore";
 import { useThemeColors } from "../../constants/theme";
+import { MAX_DISPLAY_NAME_LENGTH } from "../../constants/limits";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { DismissKeyboard } from "../../components/DismissKeyboard";
@@ -75,6 +76,7 @@ export default function RegisterScreen() {
               placeholder="Seu nome"
               value={name}
               onChangeText={setName}
+              maxLength={MAX_DISPLAY_NAME_LENGTH}
               autoCapitalize="words"
               autoComplete="name"
             />

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
 import { initRevenueCat, logOutRevenueCat } from "../lib/revenuecat";
+import { normalizeDisplayName } from "../lib/displayName";
 import { useDecksStore } from "./decksStore";
 import { useReviewStore } from "./reviewStore";
 import type { Profile } from "../types/database";
@@ -45,10 +46,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .from("profiles")
       .select("*")
       .eq("id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      return;
+    }
+
+    if (data) {
+      set({ profile: data as Profile });
+      return;
+    }
+
+    const fallbackDisplayName = normalizeDisplayName(
+      (user.user_metadata?.display_name as string | undefined) ??
+      (user.user_metadata?.full_name as string | undefined) ??
+      user.email?.split("@")[0] ??
+      null
+    );
+
+    const { data: created, error: createError } = await supabase
+      .from("profiles")
+      .insert({
+        id: user.id,
+        display_name: fallbackDisplayName,
+      })
+      .select("*")
       .single();
 
-    if (!error && data) {
-      set({ profile: data as Profile });
+    if (!createError && created) {
+      set({ profile: created as Profile });
     }
   },
 
@@ -56,14 +82,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const user = get().user;
     if (!user) return;
 
+    const normalizedUpdates: Partial<Profile> = { ...updates };
+    if ("display_name" in normalizedUpdates) {
+      normalizedUpdates.display_name = normalizeDisplayName(normalizedUpdates.display_name);
+    }
+
     const { error } = await supabase
       .from("profiles")
-      .update(updates)
+      .update(normalizedUpdates)
       .eq("id", user.id);
 
     if (!error) {
       set((state) => ({
-        profile: state.profile ? { ...state.profile, ...updates } : null,
+        profile: state.profile ? { ...state.profile, ...normalizedUpdates } : null,
       }));
     }
   },
@@ -74,10 +105,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signUpWithEmail: async (email, password, displayName) => {
+    const normalizedDisplayName = normalizeDisplayName(displayName);
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { display_name: displayName } },
+      options: { data: { display_name: normalizedDisplayName } },
     });
     return { error: error?.message ?? null };
   },
@@ -90,7 +122,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     // Update display_name on first sign-in (Apple only sends it once)
     if (!error && data.user && fullName) {
-      await supabase.from("profiles").update({ display_name: fullName }).eq("id", data.user.id);
+      await supabase
+        .from("profiles")
+        .update({ display_name: normalizeDisplayName(fullName) })
+        .eq("id", data.user.id);
     }
 
     return { error: error?.message ?? null };

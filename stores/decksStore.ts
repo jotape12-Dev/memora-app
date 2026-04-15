@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
+import { normalizeDisplayName } from "../lib/displayName";
 import type { Deck, Flashcard, GeneratedFlashcard, SM2Rating, ErrorDeckCard } from "../types/database";
 import { calculateSM2 } from "../lib/sm2";
 
@@ -11,6 +12,17 @@ interface ErrorDeckRow {
 const MAX_CARDS_PER_SESSION = 50;
 const ERROR_DECK_COLOR = "#a12c7b";
 const ERROR_DECK_TITLE = "Revisão Urgente";
+
+function normalizeDeckList(allDecks: Deck[]): Deck[] {
+  const errorDecks = allDecks.filter((d) => d.is_error_deck);
+  if (errorDecks.length === 0) return allDecks;
+
+  const canonicalErrorDeck = errorDecks.reduce((oldest, current) =>
+    current.created_at < oldest.created_at ? current : oldest
+  );
+
+  return allDecks.filter((d) => !d.is_error_deck || d.id === canonicalErrorDeck.id);
+}
 
 interface DecksState {
   // Decks
@@ -64,27 +76,59 @@ export const useDecksStore = create<DecksState>((set, get) => ({
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      const allDecks = data as Deck[];
-      const errDeck = allDecks.find((d) => d.is_error_deck) ?? null;
-      set({ decks: allDecks, errorDeck: errDeck });
+      const normalizedDecks = normalizeDeckList(data as Deck[]);
+      const errDeck = normalizedDecks.find((d) => d.is_error_deck) ?? null;
+      set({ decks: normalizedDecks, errorDeck: errDeck });
     }
     set({ loading: false });
   },
 
   createDeck: async (title, subject, color) => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
     if (!user) return null;
 
-    const { data, error } = await supabase
+    const payload = {
+      user_id: user.id,
+      title,
+      subject: subject || null,
+      color: color || "#01696f",
+    };
+
+    let { data, error } = await supabase
       .from("decks")
-      .insert({
-        user_id: user.id,
-        title,
-        subject: subject || null,
-        color: color || "#01696f",
-      })
+      .insert(payload)
       .select()
       .single();
+
+    // Recovery for users without a profile row (FK on decks.user_id -> profiles.id)
+    if (error?.code === "23503") {
+      const fallbackDisplayName = normalizeDisplayName(
+        (user.user_metadata?.display_name as string | undefined) ??
+        (user.user_metadata?.full_name as string | undefined) ??
+        user.email?.split("@")[0] ??
+        null
+      );
+
+      await supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: user.id,
+            display_name: fallbackDisplayName,
+          },
+          { onConflict: "id" }
+        );
+
+      const retry = await supabase
+        .from("decks")
+        .insert(payload)
+        .select()
+        .single();
+
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (!error && data) {
       const deck = data as Deck;
@@ -137,11 +181,15 @@ export const useDecksStore = create<DecksState>((set, get) => ({
       .select("*")
       .eq("user_id", user.id)
       .eq("is_error_deck", true)
-      .maybeSingle();
+      .order("created_at", { ascending: true })
+      .limit(1);
 
-    if (found) {
-      const deck = found as Deck;
-      set({ errorDeck: deck });
+    if (found && found.length > 0) {
+      const deck = found[0] as Deck;
+      set((state) => ({
+        errorDeck: deck,
+        decks: state.decks.some((d) => d.id === deck.id) ? state.decks : [deck, ...state.decks],
+      }));
       return deck;
     }
 
@@ -159,20 +207,49 @@ export const useDecksStore = create<DecksState>((set, get) => ({
 
     if (!error && created) {
       const deck = created as Deck;
-      set((state) => ({ errorDeck: deck, decks: [deck, ...state.decks] }));
+      set((state) => ({
+        errorDeck: deck,
+        decks: state.decks.some((d) => d.id === deck.id) ? state.decks : [deck, ...state.decks],
+      }));
       return deck;
     }
     return null;
   },
 
   handleErrorDeckAfterReview: async (card, rating) => {
-    const errDeck = await get().ensureErrorDeck();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const shouldAddToErrorDeck = rating === 0 || rating === 2;
+    const shouldHandleRecovery = rating === 3 || rating === 5;
+    if (!shouldAddToErrorDeck && !shouldHandleRecovery) return;
+
+    let errDeck = get().errorDeck;
+
+    if (shouldAddToErrorDeck) {
+      errDeck = await get().ensureErrorDeck();
+    } else if (!errDeck) {
+      const { data: found } = await supabase
+        .from("decks")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_error_deck", true)
+        .order("created_at", { ascending: true })
+        .limit(1);
+
+      if (found && found.length > 0) {
+        const deck = found[0] as Deck;
+        errDeck = deck;
+        set((state) => ({
+          errorDeck: deck,
+          decks: state.decks.some((d) => d.id === deck.id) ? state.decks : [deck, ...state.decks],
+        }));
+      }
+    }
+
     if (!errDeck) return;
     // Skip if the card is already IN the error deck
     if (card.deck_id === errDeck.id) return;
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
 
     if (rating === 0 || rating === 2) {
       // Add to error deck if not present, reset consecutive_correct
@@ -220,7 +297,7 @@ export const useDecksStore = create<DecksState>((set, get) => ({
     }
 
     // Refresh the count
-    get().fetchErrorDeckCount();
+    await get().fetchErrorDeckCount();
   },
 
   fetchErrorDeckCount: async () => {
@@ -235,9 +312,26 @@ export const useDecksStore = create<DecksState>((set, get) => ({
       .select("id", { count: "exact", head: true })
       .eq("error_deck_id", errDeck.id);
 
-    if (!error && count !== null) {
-      set({ errorDeckCardCount: count });
+    if (error || count === null) return;
+
+    if (count === 0) {
+      const { error: deleteError } = await supabase
+        .from("decks")
+        .delete()
+        .eq("id", errDeck.id)
+        .eq("is_error_deck", true);
+
+      if (!deleteError) {
+        set((state) => ({
+          errorDeck: null,
+          errorDeckCardCount: 0,
+          decks: state.decks.filter((d) => d.id !== errDeck.id),
+        }));
+        return;
+      }
     }
+
+    set({ errorDeckCardCount: count });
   },
 
   // ─── Flashcards ──────────────────────────────────────────

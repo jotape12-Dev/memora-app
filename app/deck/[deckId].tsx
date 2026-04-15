@@ -17,6 +17,7 @@ import {
 import { useLocalSearchParams, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { Swipeable } from "react-native-gesture-handler";
 import { useThemeColors } from "../../constants/theme";
 import { useDecksStore } from "../../stores/decksStore";
 import { supabase } from "../../lib/supabase";
@@ -25,7 +26,7 @@ import { EmptyState } from "../../components/EmptyState";
 import type { Flashcard, DeckStats } from "../../types/database";
 
 export default function DeckDetailScreen() {
-  const { deckId } = useLocalSearchParams<{ deckId: string }>();
+  const { deckId, from } = useLocalSearchParams<{ deckId: string; from?: string }>();
   const colors = useThemeColors();
   const { decks, deleteDeck } = useDecksStore();
   const {
@@ -48,7 +49,16 @@ export default function DeckDetailScreen() {
 
   const deck = decks.find((d) => d.id === deckId);
   const isErrorDeck = deck?.is_error_deck ?? false;
+  const hasCards = flashcards.length > 0;
   const dueCount = deckDueCards.length;
+
+  const handleBack = () => {
+    if (from === "generated") {
+      router.replace("/(tabs)");
+      return;
+    }
+    router.back();
+  };
 
   const fetchStats = useCallback(async () => {
     if (!deckId) return;
@@ -94,6 +104,16 @@ export default function DeckDetailScreen() {
     ]);
   };
 
+  const renderDeleteCardAction = (card: Flashcard) => (
+    <Pressable
+      onPress={() => handleDeleteCard(card)}
+      style={[styles.swipeAction, styles.deleteAction]}
+    >
+      <Ionicons name="trash" size={18} color="#fff" />
+      <Text style={styles.swipeActionText}>Excluir</Text>
+    </Pressable>
+  );
+
   const handleDeleteDeck = () => {
     if (isErrorDeck) return;
     Alert.alert(
@@ -106,7 +126,7 @@ export default function DeckDetailScreen() {
           style: "destructive",
           onPress: async () => {
             await deleteDeck(deckId!);
-            router.back();
+            handleBack();
           },
         },
       ]
@@ -116,24 +136,23 @@ export default function DeckDetailScreen() {
   const renderCard = ({ item }: { item: Flashcard }) => {
     const isDue = item.next_review_at <= new Date().toISOString().split("T")[0];
     return (
-      <Pressable
-        onLongPress={() => handleDeleteCard(item)}
-        style={[styles.cardItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
-      >
-        <View style={styles.cardContent}>
-          <Text style={[styles.cardQuestion, { color: colors.text }]} numberOfLines={2}>
-            {item.question}
-          </Text>
-          <Text style={[styles.cardAnswer, { color: colors.textSecondary }]} numberOfLines={1}>
-            {item.answer}
-          </Text>
-        </View>
-        {isDue && (
-          <View style={[styles.dueIndicator, { backgroundColor: isErrorDeck ? deck?.color : colors.primary }]}>
-            <Text style={styles.dueText}>Pendente</Text>
+      <Swipeable renderRightActions={() => renderDeleteCardAction(item)} overshootRight={false}>
+        <Pressable style={[styles.cardItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.cardContent}>
+            <Text style={[styles.cardQuestion, { color: colors.text }]} numberOfLines={2}>
+              {item.question}
+            </Text>
+            <Text style={[styles.cardAnswer, { color: colors.textSecondary }]} numberOfLines={1}>
+              {item.answer}
+            </Text>
           </View>
-        )}
-      </Pressable>
+          {isDue && (
+            <View style={[styles.dueIndicator, { backgroundColor: isErrorDeck ? deck?.color : colors.primary }]}>
+              <Text style={styles.dueText}>Pendente</Text>
+            </View>
+          )}
+        </Pressable>
+      </Swipeable>
     );
   };
 
@@ -250,9 +269,9 @@ export default function DeckDetailScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      {/* Header */}
+        {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={handleBack}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
         <View style={styles.headerCenter}>
@@ -307,7 +326,7 @@ export default function DeckDetailScreen() {
       <FlatList
         data={flashcards}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, !isErrorDeck && !hasCards && styles.listWithoutFab]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
@@ -334,7 +353,7 @@ export default function DeckDetailScreen() {
       />
 
       {/* FABs — hide for error deck */}
-      {!isErrorDeck && (
+      {!isErrorDeck && hasCards && (
         <>
           <Pressable
             onPress={() => router.push({ pathname: "/capture", params: { deckId } })}
@@ -486,6 +505,7 @@ const styles = StyleSheet.create({
   hardCardEase: { fontSize: 12 },
   // Cards list
   list: { paddingHorizontal: 20, paddingBottom: 100 },
+  listWithoutFab: { paddingBottom: 24 },
   cardItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -504,6 +524,22 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   dueText: { color: "#fff", fontSize: 10, fontWeight: "600" },
+  swipeAction: {
+    width: 104,
+    marginBottom: 8,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  deleteAction: {
+    backgroundColor: "#dc2626",
+  },
+  swipeActionText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   fab: {
     position: "absolute",
     bottom: 24,

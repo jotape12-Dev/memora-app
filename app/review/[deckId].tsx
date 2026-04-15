@@ -36,6 +36,8 @@ export default function ReviewScreen() {
   const [startTime] = useState(Date.now());
 
   const confettiRef = useRef<ConfettiCannon>(null);
+  const isRatingRef = useRef(false);
+  const sessionSavedRef = useRef(false);
 
   useEffect(() => {
     if (deckId) {
@@ -58,28 +60,39 @@ export default function ReviewScreen() {
 
   const handleRate = useCallback(
     async (rating: SM2Rating) => {
-      if (!currentCard) return;
+      if (!currentCard || isRatingRef.current) return;
+      isRatingRef.current = true;
 
-      if (rating >= 3) {
-        setCorrect((prev) => prev + 1);
-      }
-
-      await reviewCard(currentCard, rating);
-
-      if (currentIndex + 1 >= totalCards) {
-        // Session complete
-        const duration = Math.round((Date.now() - startTime) / 1000);
-        const finalCorrect = rating >= 3 ? correct + 1 : correct;
-        await createSession(deckId!, totalCards, finalCorrect, duration);
-
-        setFinished(true);
-
-        if (finalCorrect === totalCards) {
-          confettiRef.current?.start();
+      try {
+        if (rating >= 3) {
+          setCorrect((prev) => prev + 1);
         }
-      } else {
-        setCurrentIndex((prev) => prev + 1);
-        setFlipped(false);
+
+        await reviewCard(currentCard, rating);
+
+        if (currentIndex + 1 >= totalCards) {
+          // Session complete
+          const duration = Math.round((Date.now() - startTime) / 1000);
+          const finalCorrect = rating >= 3 ? correct + 1 : correct;
+
+          if (!sessionSavedRef.current) {
+            sessionSavedRef.current = true;
+            await createSession(deckId!, totalCards, finalCorrect, duration);
+          }
+
+          setFinished(true);
+
+          if (finalCorrect === totalCards) {
+            confettiRef.current?.start();
+          }
+        } else {
+          setCurrentIndex((prev) => prev + 1);
+          setFlipped(false);
+        }
+      } finally {
+        if (currentIndex + 1 < totalCards) {
+          isRatingRef.current = false;
+        }
       }
     },
     [currentCard, currentIndex, totalCards, correct, startTime, deckId, reviewCard, createSession]
@@ -203,7 +216,9 @@ export default function ReviewScreen() {
             <Text style={styles.showAnswerText}>Ver resposta</Text>
           </Pressable>
         ) : (
-          <RatingButtons onRate={handleRate} />
+          <View pointerEvents={isRatingRef.current ? "none" : "auto"} style={isRatingRef.current ? styles.disabled : undefined}>
+            <RatingButtons onRate={handleRate} />
+          </View>
         )}
       </View>
     </SafeAreaView>
@@ -241,6 +256,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 17,
     fontWeight: "600",
+  },
+  disabled: {
+    opacity: 0.6,
   },
   centered: {
     flex: 1,

@@ -38,6 +38,7 @@ export default function CaptureScreen() {
   const { generateFromText, generating } = useDecksStore();
   const { decks, createDeck, fetchDecks } = useDecksStore();
   const profile = useAuthStore((s) => s.profile);
+  const fetchProfile = useAuthStore((s) => s.fetchProfile);
 
   const selectedDeck = decks.find((d) => d.id === selectedDeckId);
 
@@ -122,6 +123,8 @@ export default function CaptureScreen() {
       Alert.alert("Erro", result.error);
       return;
     }
+
+    await fetchProfile();
 
     router.push({
       pathname: "/preview-cards",

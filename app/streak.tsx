@@ -117,7 +117,7 @@ export default function StreakScreen() {
 
         {/* Streak hero */}
         <View style={[styles.hero, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={styles.flameIcon}>🔥</Text>
+          <Ionicons name="flame" size={48} color="#f59e0b" />
           <Text style={[styles.streakNumber, { color: colors.text }]}>{streak}</Text>
           <Text style={[styles.streakLabel, { color: colors.textSecondary }]}>
             {streak === 1 ? "dia seguido" : "dias seguidos"}
@@ -223,7 +223,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 4,
   },
-  flameIcon: { fontSize: 48, lineHeight: 56 },
   streakNumber: { fontSize: 64, fontWeight: "800", lineHeight: 72 },
   streakLabel: { fontSize: 16 },
   statsRow: {

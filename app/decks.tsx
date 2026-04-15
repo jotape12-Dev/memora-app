@@ -13,9 +13,10 @@ import {
   Keyboard,
   RefreshControl,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { Swipeable } from "react-native-gesture-handler";
 import { useThemeColors } from "../constants/theme";
 import { useDecksStore } from "../stores/decksStore";
 import { DeckCard } from "../components/DeckCard";
@@ -26,7 +27,7 @@ import type { Deck } from "../types/database";
 
 export default function DecksScreen() {
   const colors = useThemeColors();
-  const { decks, dueCards, fetchDecks, fetchAllDueCards, createDeck } = useDecksStore();
+  const { decks, dueCards, fetchDecks, fetchAllDueCards, createDeck, deleteDeck } = useDecksStore();
 
   const [search, setSearch] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -35,17 +36,20 @@ export default function DecksScreen() {
   const [subject, setSubject] = useState("");
   const [selectedColor, setSelectedColor] = useState(DeckColors[0]);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchDecks();
+      fetchAllDueCards();
+    }, [fetchDecks, fetchAllDueCards])
+  );
+
   const dueByDeck = dueCards.reduce<Record<string, number>>((acc, card) => {
     acc[card.deck_id] = (acc[card.deck_id] || 0) + 1;
     return acc;
   }, {});
 
-  // Sort error deck to top
-  const sortedDecks = [...decks].sort((a, b) => {
-    if (a.is_error_deck && !b.is_error_deck) return -1;
-    if (!a.is_error_deck && b.is_error_deck) return 1;
-    return 0;
-  });
+  const regularDecks = decks.filter((d) => !d.is_error_deck);
+  const sortedDecks = [...regularDecks].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   const filtered = search.trim()
     ? sortedDecks.filter(
@@ -77,15 +81,45 @@ export default function DecksScreen() {
     setShowModal(false);
   };
 
-  const totalCards = decks.reduce((sum, d) => sum + d.card_count, 0);
+  const totalCards = regularDecks.reduce((sum, d) => sum + d.card_count, 0);
   const totalDue = dueCards.length;
+  const regularDeckCount = regularDecks.length;
+
+  const handleDeleteDeck = (deck: Deck) => {
+    Alert.alert(
+      "Excluir deck?",
+      "Todos os flashcards deste deck serão excluídos permanentemente.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: async () => {
+            await deleteDeck(deck.id);
+          },
+        },
+      ]
+    );
+  };
+
+  const renderDeleteDeckAction = (deck: Deck) => (
+    <Pressable
+      onPress={() => handleDeleteDeck(deck)}
+      style={[styles.swipeAction, styles.deleteAction]}
+    >
+      <Ionicons name="trash" size={18} color="#fff" />
+      <Text style={styles.swipeActionText}>Excluir</Text>
+    </Pressable>
+  );
 
   const renderDeck = ({ item }: { item: Deck }) => (
-    <DeckCard
-      deck={item}
-      dueCount={dueByDeck[item.id] || 0}
-      onPress={() => router.push(`/deck/${item.id}`)}
-    />
+    <Swipeable renderRightActions={() => renderDeleteDeckAction(item)} overshootRight={false}>
+      <DeckCard
+        deck={item}
+        dueCount={dueByDeck[item.id] || 0}
+        onPress={() => router.push(`/deck/${item.id}`)}
+      />
+    </Swipeable>
   );
 
   return (
@@ -103,7 +137,7 @@ export default function DecksScreen() {
       <View style={styles.summaryRow}>
         <View style={[styles.summaryItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Ionicons name="library" size={18} color="#7c3aed" />
-          <Text style={[styles.summaryNum, { color: colors.text }]}>{decks.length}</Text>
+          <Text style={[styles.summaryNum, { color: colors.text }]}>{regularDeckCount}</Text>
           <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>decks</Text>
         </View>
         <View style={[styles.summaryItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -263,6 +297,22 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14 },
   list: { paddingHorizontal: 20, paddingBottom: 100 },
+  swipeAction: {
+    width: 104,
+    marginBottom: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  deleteAction: {
+    backgroundColor: "#dc2626",
+  },
+  swipeActionText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   noResults: {
     alignItems: "center",
     paddingTop: 60,

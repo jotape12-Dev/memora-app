@@ -41,7 +41,7 @@ function formatDuration(seconds: number): string {
 export default function HomeScreen() {
   const colors = useThemeColors();
   const profile = useAuthStore((s) => s.profile);
-  const { decks, fetchDecks, createDeck, ensureErrorDeck, errorDeckCardCount, fetchErrorDeckCount } = useDecksStore();
+  const { decks, fetchDecks, createDeck, errorDeckCardCount, fetchErrorDeckCount } = useDecksStore();
   const { dueCards, fetchAllDueCards } = useDecksStore();
   const { streak, activeDays, calculateStreak } = useReviewStore();
   const [refreshing, setRefreshing] = useState(false);
@@ -82,10 +82,8 @@ export default function HomeScreen() {
       calculateStreak(),
       fetchHomeStats(),
     ]);
-    // Ensure error deck exists and count is loaded
-    await ensureErrorDeck();
     await fetchErrorDeckCount();
-  }, [fetchDecks, fetchAllDueCards, calculateStreak, fetchHomeStats, ensureErrorDeck, fetchErrorDeckCount]);
+  }, [fetchDecks, fetchAllDueCards, calculateStreak, fetchHomeStats, fetchErrorDeckCount]);
 
   useFocusEffect(
     useCallback(() => {
@@ -115,12 +113,9 @@ export default function HomeScreen() {
     return "Boa noite";
   };
 
-  // Sort decks: error deck first, then by created_at desc
-  const sortedDecks = [...decks].sort((a, b) => {
-    if (a.is_error_deck && !b.is_error_deck) return -1;
-    if (!a.is_error_deck && b.is_error_deck) return 1;
-    return b.created_at.localeCompare(a.created_at);
-  });
+  // Sort regular decks by created_at desc
+  const regularDecks = decks.filter((d) => !d.is_error_deck);
+  const sortedDecks = [...regularDecks].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   // Error deck banner
   const errorDeck = decks.find((d) => d.is_error_deck);
@@ -163,12 +158,12 @@ export default function HomeScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <View style={{ flex: 1 }}>
+          <View style={styles.headerLeft}>
             <Text style={[styles.greeting, { color: colors.textSecondary }]}>
               {greeting()},
             </Text>
             <View style={styles.nameRow}>
-              <Text style={[styles.name, { color: colors.text }]}>
+              <Text style={[styles.name, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">
                 {profile?.display_name || "Estudante"}
               </Text>
               {profile?.is_premium && (
@@ -236,7 +231,7 @@ export default function HomeScreen() {
             style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
           >
             <Ionicons name="library" size={22} color="#7c3aed" />
-            <Text style={[styles.kpiNumber, { color: colors.text }]}>{decks.filter((d) => !d.is_error_deck).length}</Text>
+            <Text style={[styles.kpiNumber, { color: colors.text }]}>{regularDecks.length}</Text>
             <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>decks</Text>
           </Pressable>
         </ScrollView>
@@ -315,7 +310,7 @@ export default function HomeScreen() {
         {/* Decks Section */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Meus Decks</Text>
-          {decks.length === 0 ? (
+          {regularDecks.length === 0 ? (
             <EmptyState
               icon="library-outline"
               title="Nenhum deck ainda"
@@ -338,13 +333,15 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      {/* FAB */}
-      <Pressable
-        onPress={() => setShowModal(true)}
-        style={[styles.fab, { backgroundColor: colors.primary }]}
-      >
-        <Ionicons name="add" size={28} color="#fff" />
-      </Pressable>
+      {/* FABs: only when user already has at least one deck */}
+      {regularDecks.length > 0 && (
+        <Pressable
+          onPress={() => setShowModal(true)}
+          style={[styles.fab, { backgroundColor: colors.primary }]}
+        >
+          <Ionicons name="add" size={28} color="#fff" />
+        </Pressable>
+      )}
 
       {/* Create Deck Modal */}
       <Modal visible={showModal} transparent animationType="slide">
@@ -352,8 +349,14 @@ export default function HomeScreen() {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1 }}
         >
-          <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss}>
-            <Pressable style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+          <Pressable
+            style={styles.modalOverlay}
+            onPress={() => {
+              Keyboard.dismiss();
+              setShowModal(false);
+            }}
+          >
+            <Pressable style={[styles.modalContent, { backgroundColor: colors.surface }]} onPress={() => {}}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>Novo Deck</Text>
 
               <TextInput
@@ -445,11 +448,16 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 16,
   },
+  headerLeft: {
+    flex: 1,
+    paddingRight: 8,
+  },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     marginTop: 4,
+    flexShrink: 0,
   },
   profileBtn: {
     width: 38,
@@ -465,7 +473,7 @@ const styles = StyleSheet.create({
   },
   greeting: { fontSize: 14 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  name: { fontSize: 24, fontWeight: "700" },
+  name: { fontSize: 24, fontWeight: "700", flexShrink: 1 },
   goalSubtitle: { fontSize: 12, marginTop: 2 },
   kpiRow: {
     paddingHorizontal: 20,

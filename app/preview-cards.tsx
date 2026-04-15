@@ -24,6 +24,11 @@ export default function PreviewCardsScreen() {
   const [cards, setCards] = useState<GeneratedFlashcard[]>([...generatedCards]);
   const [saving, setSaving] = useState(false);
 
+  const handleBackToHome = () => {
+    clearGeneratedCards();
+    router.replace("/(tabs)");
+  };
+
   const handleEditQuestion = (index: number, value: string) => {
     setCards((prev) => prev.map((c, i) => (i === index ? { ...c, question: value } : c)));
   };
@@ -56,7 +61,14 @@ export default function PreviewCardsScreen() {
     Alert.alert(
       "Cards salvos!",
       `${validCards.length} flashcards adicionados ao deck.`,
-      [{ text: "OK", onPress: () => router.replace(`/deck/${deckId}`) }]
+      [{
+        text: "OK",
+        onPress: () =>
+          router.replace({
+            pathname: "/deck/[deckId]",
+            params: { deckId, from: "generated" },
+          }),
+      }]
     );
   };
 
@@ -88,7 +100,7 @@ export default function PreviewCardsScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => { clearGeneratedCards(); router.back(); }}>
+        <Pressable onPress={handleBackToHome}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
         <Text style={[styles.title, { color: colors.text }]}>Preview dos Cards</Text>
