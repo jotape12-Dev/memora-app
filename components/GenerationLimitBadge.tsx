@@ -11,8 +11,21 @@ export function GenerationLimitBadge() {
   if (!profile || profile.is_premium) return null;
 
   const today = new Date().toISOString().split("T")[0];
-  const isNewDay = profile.last_generation_date !== today;
-  const count = isNewDay ? 0 : profile.daily_generation_count;
+
+  function getWeekStart(dateStr: string): string {
+    const d = new Date(dateStr + "T12:00:00Z");
+    const day = d.getUTCDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setUTCDate(d.getUTCDate() + diff);
+    return d.toISOString().split("T")[0];
+  }
+
+  const currentWeekStart = getWeekStart(today);
+  const lastWeekStart = profile.last_generation_date
+    ? getWeekStart(profile.last_generation_date)
+    : null;
+  const isNewWeek = lastWeekStart !== currentWeekStart;
+  const count = isNewWeek ? 0 : profile.daily_generation_count;
   const remaining = 10 - count;
 
   const isLow = remaining <= 3;
@@ -35,7 +48,7 @@ export function GenerationLimitBadge() {
           { color: isLow ? "#ef4444" : colors.textSecondary },
         ]}
       >
-        {remaining}/10 gerações restantes hoje
+        {remaining}/10 gerações restantes esta semana
       </Text>
     </View>
   );

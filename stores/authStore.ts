@@ -5,7 +5,9 @@ import { normalizeDisplayName } from "../lib/displayName";
 import { useDecksStore } from "./decksStore";
 import { useReviewStore } from "./reviewStore";
 import type { Profile } from "../types/database";
-import type { Session, User } from "@supabase/supabase-js";
+import type { RealtimeChannel, Session, User } from "@supabase/supabase-js";
+
+let profileChannel: RealtimeChannel | null = null;
 
 interface AuthState {
   session: Session | null;
@@ -30,9 +32,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setSession: (session) => {
     set({ session, user: session?.user ?? null, loading: false });
+
+    if (profileChannel) {
+      void supabase.removeChannel(profileChannel);
+      profileChannel = null;
+    }
+
     if (session?.user) {
       get().fetchProfile();
       initRevenueCat(session.user.id);
+
+      profileChannel = supabase
+        .channel(`profile-${session.user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "profiles",
+            filter: `id=eq.${session.user.id}`,
+          },
+          (payload) => {
+            const updatedProfile = payload.new as Profile;
+            set((state) => ({
+              profile: state.profile ? { ...state.profile, ...updatedProfile } : updatedProfile,
+            }));
+          }
+        )
+        .subscribe();
     } else {
       set({ profile: null });
     }
@@ -132,6 +159,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    if (profileChannel) {
+      await supabase.removeChannel(profileChannel);
+      profileChannel = null;
+    }
+
     await logOutRevenueCat();
     await supabase.auth.signOut();
     set({ session: null, user: null, profile: null });
@@ -142,6 +174,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   deleteAccount: async () => {
     const { error } = await supabase.functions.invoke("delete-account");
     if (error) return { error: error.message };
+
+    if (profileChannel) {
+      await supabase.removeChannel(profileChannel);
+      profileChannel = null;
+    }
+
     await logOutRevenueCat();
     await supabase.auth.signOut();
     set({ session: null, user: null, profile: null });

@@ -8,16 +8,18 @@
     "userInterfaceStyle": "automatic",
     "scheme": "memora",
     "newArchEnabled": true,
-    "splash": {
-      "backgroundColor": "#01696f"
-    },
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.jotape.memora.app",
       "buildNumber": "2",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
-        "NSCameraUsageDescription": "Memora needs camera access to capture text from books and notes for flashcard generation.",
-        "NSPhotoLibraryUsageDescription": "Memora needs photo library access to select images for text extraction."
+        "NSCameraUsageDescription": "O Memora usa a câmera para fotografar textos e gerar flashcards automaticamente.",
+        "NSPhotoLibraryUsageDescription": "O Memora acessa a galeria para importar imagens de texto para gerar flashcards.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -27,6 +29,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.jotape.memora.app",
+      "versionCode": 2,
       "permissions": ["android.permission.CAMERA"]
     },
     "web": {
@@ -47,6 +50,17 @@
       "expo-font",
       "expo-sqlite",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#f7f6f2",
+          "dark": {
+            "backgroundColor": "#171614"
+          },
+          "imageWidth": 200
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
@@ -56,7 +70,7 @@
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "Memora needs camera access to capture text from books and notes."
+          "cameraPermissionText": "O Memora usa a câmera para fotografar textos e gerar flashcards automaticamente."
         }
       ]
     ]

@@ -107,10 +107,10 @@ export default function CaptureScreen() {
 
     const result = await generateFromText(inputText.trim());
 
-    if (result.error === "daily_limit_reached") {
+    if (result.error === "weekly_limit_reached") {
       Alert.alert(
-        "Limite diário atingido",
-        "Você atingiu o limite de 10 gerações diárias. Assine o Premium para gerações ilimitadas.",
+        "Limite semanal atingido",
+        "Você atingiu o limite de 10 gerações semanais. Assine o Premium para gerações ilimitadas.",
         [
           { text: "Ver Premium", onPress: () => router.push("/paywall") },
           { text: "OK" },
@@ -119,8 +119,19 @@ export default function CaptureScreen() {
       return;
     }
 
+    if (result.error === "service_unavailable") {
+      Alert.alert(
+        "Muita demanda agora",
+        "Tente novamente em alguns minutos."
+      );
+      return;
+    }
+
     if (result.error) {
-      Alert.alert("Erro", result.error);
+      Alert.alert(
+        "Não foi possível gerar os cards",
+        "O serviço está temporariamente indisponível. Tente novamente em alguns minutos."
+      );
       return;
     }
 

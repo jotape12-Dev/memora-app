@@ -538,7 +538,7 @@ export const useDecksStore = create<DecksState>((set, get) => ({
           else if (body?.message) errMsg = body.message;
         } catch { /* ignore */ }
 
-        if (errMsg === "daily_limit_reached") return { error: "daily_limit_reached" };
+        if (errMsg === "weekly_limit_reached") return { error: "weekly_limit_reached" };
         return { error: errMsg };
       }
 

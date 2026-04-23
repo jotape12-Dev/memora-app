@@ -45,9 +45,10 @@ supabase functions deploy generate-from-topic
 4. Configure os secrets nas Edge Functions:
 
 ```bash
-supabase secrets set HUGGINGFACE_API_KEY=your-key
-supabase secrets set OPENAI_API_KEY=your-key
+supabase secrets set GROQ_API_KEY=your-key
 ```
+
+O secret `GROQ_API_KEY` é obrigatório — as Edge Functions `generate-from-text` e `generate-from-topic` usam a Groq API (modelo `llama-3.1-8b-instant`) para gerar flashcards.
 
 ### 4. Execute o app
 
@@ -83,5 +84,5 @@ supabase/
 
 ## Modelo Freemium
 
-- **Free**: 10 gerações/dia via texto/imagem (Hugging Face Mistral-7B)
-- **Premium**: Gerações ilimitadas + geração por tópico (OpenAI gpt-4o-mini)
+- **Free**: 10 gerações/semana via texto/imagem (Groq API — llama-3.1-8b-instant)
+- **Premium**: Gerações ilimitadas + geração por tópico (Groq API — llama-3.1-8b-instant; futuro on-device: gemma-3-4b-it via ExecuTorch)

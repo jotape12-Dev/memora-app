@@ -197,11 +197,17 @@ export default function HomeScreen() {
         >
           <Pressable
             onPress={() => router.push("/streak")}
-            style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            style={[
+              styles.kpiCard,
+              {
+                backgroundColor: streakLost ? colors.error : "#f59e0b",
+                borderColor: streakLost ? colors.error : "#f59e0b",
+              },
+            ]}
           >
-            <Ionicons name="flame" size={22} color={streakLost ? colors.error : "#f59e0b"} />
-            <Text style={[styles.kpiNumber, { color: streakLost ? colors.error : colors.text }]}>{streak}</Text>
-            <Text style={[styles.kpiLabel, { color: streakLost ? colors.error : colors.textSecondary }]}>
+            <Ionicons name="flame" size={22} color="#fff" />
+            <Text style={[styles.kpiNumber, { color: "#fff" }]}>{streak}</Text>
+            <Text style={[styles.kpiLabel, { color: "rgba(255,255,255,0.9)" }]}>
               {streakLost ? "Streak perdido" : streak === 1 ? "dia seguido" : "dias seguidos"}
             </Text>
           </Pressable>
@@ -228,11 +234,11 @@ export default function HomeScreen() {
 
           <Pressable
             onPress={() => router.push("/decks")}
-            style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            style={[styles.kpiCard, { backgroundColor: "#7c3aed", borderColor: "#7c3aed" }]}
           >
-            <Ionicons name="library" size={22} color="#7c3aed" />
-            <Text style={[styles.kpiNumber, { color: colors.text }]}>{regularDecks.length}</Text>
-            <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>decks</Text>
+            <Ionicons name="library" size={22} color="#fff" />
+            <Text style={[styles.kpiNumber, { color: "#fff" }]}>{regularDecks.length}</Text>
+            <Text style={[styles.kpiLabel, { color: "rgba(255,255,255,0.9)" }]}>decks</Text>
           </Pressable>
         </ScrollView>
 

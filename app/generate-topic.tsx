@@ -12,7 +12,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "../constants/theme";
 import { useDecksStore } from "../stores/decksStore";
-import { useAuthStore } from "../stores/authStore";
 import { PremiumGate } from "../components/PremiumGate";
 import { Button } from "../components/Button";
 import { Input } from "../components/Input";
@@ -22,7 +21,6 @@ const QUANTITIES = [5, 10, 15, 20, 30];
 
 export default function GenerateTopicScreen() {
   const colors = useThemeColors();
-  const profile = useAuthStore((s) => s.profile);
   const { generateFromTopic, generating } = useDecksStore();
   const { decks, createDeck } = useDecksStore();
 
@@ -33,23 +31,24 @@ export default function GenerateTopicScreen() {
   const [additionalContext, setAdditionalContext] = useState("");
   const [selectedDeckId, setSelectedDeckId] = useState<string | null>(null);
 
+  const ensureDeckId = async (): Promise<string | null> => {
+    if (selectedDeckId) return selectedDeckId;
+    const deck = await createDeck(topic.trim());
+    if (!deck) return null;
+    setSelectedDeckId(deck.id);
+    return deck.id;
+  };
+
   const handleGenerate = async () => {
     if (!topic.trim()) {
       Alert.alert("Erro", "Insira o nome do conteúdo.");
       return;
     }
 
-    let deckId = selectedDeckId;
-
-    // Auto-create deck if none selected
+    const deckId = await ensureDeckId();
     if (!deckId) {
-      const deck = await createDeck(topic.trim());
-      if (!deck) {
-        Alert.alert("Erro", "Falha ao criar o deck.");
-        return;
-      }
-      deckId = deck.id;
-      setSelectedDeckId(deck.id);
+      Alert.alert("Erro", "Falha ao criar o deck.");
+      return;
     }
 
     const result = await generateFromTopic(
@@ -65,15 +64,23 @@ export default function GenerateTopicScreen() {
       return;
     }
 
-    if (result.error) {
-      Alert.alert("Erro", result.error);
+    if (result.error === "service_unavailable") {
+      Alert.alert(
+        "Muita demanda agora",
+        "Tente novamente em alguns minutos."
+      );
       return;
     }
 
-    router.push({
-      pathname: "/preview-cards",
-      params: { deckId },
-    });
+    if (result.error) {
+      Alert.alert(
+        "Não foi possível gerar os cards",
+        "O serviço está temporariamente indisponível. Tente novamente em alguns minutos."
+      );
+      return;
+    }
+
+    router.push({ pathname: "/preview-cards", params: { deckId } });
   };
 
   return (

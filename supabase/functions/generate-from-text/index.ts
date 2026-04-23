@@ -1,17 +1,61 @@
 // @verify_jwt: false
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
+const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-const FREE_DAILY_LIMIT = 10;
+const FREE_WEEKLY_LIMIT = 10;
+
+function getWeekStart(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00Z");
+  const day = d.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day; // Monday as week start
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d.toISOString().split("T")[0];
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Content-Type": "application/json",
 };
+
+// Calls Groq with automatic retry on 429 (TPM rate limit).
+// Supabase Edge Functions timeout = 150s; with 2 retries of 61s each + processing we stay ~130s.
+async function callGroqWithRetry(
+  messages: object[],
+  maxTokens: number,
+  retries = 2,
+  delayMs = 61000,
+): Promise<Response> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const response = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${Deno.env.get("GROQ_API_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          messages,
+          max_tokens: maxTokens,
+          temperature: 0.7,
+          stream: false,
+        }),
+      },
+    );
+
+    if (response.status !== 429) return response;
+    if (attempt === retries) return response;
+
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  throw new Error("Retry loop exhausted");
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -69,34 +113,33 @@ Deno.serve(async (req) => {
     const today = new Date().toISOString().split("T")[0];
 
     if (!profile.is_premium) {
-      const isNewDay = profile.last_generation_date !== today;
-      const count = isNewDay ? 0 : profile.daily_generation_count;
+      const currentWeekStart = getWeekStart(today);
+      const lastWeekStart = profile.last_generation_date
+        ? getWeekStart(profile.last_generation_date)
+        : null;
+      const isNewWeek = lastWeekStart !== currentWeekStart;
+      const count = isNewWeek ? 0 : profile.daily_generation_count;
 
-      if (count >= FREE_DAILY_LIMIT) {
-        return new Response(JSON.stringify({ error: "daily_limit_reached", limit: FREE_DAILY_LIMIT }), {
+      if (count >= FREE_WEEKLY_LIMIT) {
+        return new Response(JSON.stringify({ error: "weekly_limit_reached", limit: FREE_WEEKLY_LIMIT }), {
           status: 429,
           headers: corsHeaders,
         });
       }
 
       await supabase.from("profiles").update({
-        daily_generation_count: isNewDay ? 1 : count + 1,
+        daily_generation_count: isNewWeek ? 1 : count + 1,
         last_generation_date: today,
       }).eq("id", user.id);
     }
 
-    // Call Gemini API
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `Você é um educador especialista. Dado o texto abaixo, gere exatamente ${quantity} pares de flashcards otimizados para aprendizado por repetição espaçada.
+    const groqResponse = await callGroqWithRetry(
+      [{
+        role: "user",
+        content: `Você é um educador especialista. Dado o texto abaixo, gere EXATAMENTE ${quantity} pares de flashcards otimizados para aprendizado por repetição espaçada. Nem mais, nem menos. O array "flashcards" DEVE conter exatamente ${quantity} itens.
 
 Regras:
+- O array "flashcards" deve ter exatamente ${quantity} objetos — conte antes de retornar
 - As perguntas devem testar compreensão, não apenas memorização
 - As respostas devem ser concisas (máximo 3 frases)
 - Foque nos conceitos mais importantes
@@ -106,29 +149,30 @@ Regras:
 Texto:
 ${text.substring(0, 4000)}
 
-Retorne exatamente neste formato JSON (nada mais):
-{"flashcards": [{"question": "...", "answer": "..."}]}`
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 4000,
-          },
-        }),
-      }
+Retorne exatamente neste formato JSON (nada mais), com ${quantity} itens no array:
+{"flashcards": [{"question": "...", "answer": "..."}]}`,
+      }],
+      5000,
     );
 
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text();
-      console.error("Gemini API error:", geminiResponse.status, errorText);
-      return new Response(JSON.stringify({ error: `Gemini error ${geminiResponse.status}: ${errorText.substring(0, 300)}` }), {
+    if (groqResponse.status === 429) {
+      return new Response(JSON.stringify({ error: "service_unavailable" }), {
+        status: 503,
+        headers: corsHeaders,
+      });
+    }
+
+    if (!groqResponse.ok) {
+      const errorText = await groqResponse.text();
+      console.error("Groq API error:", groqResponse.status, errorText);
+      return new Response(JSON.stringify({ error: `Groq error ${groqResponse.status}: ${errorText.substring(0, 300)}` }), {
         status: 502,
         headers: corsHeaders,
       });
     }
 
-    const geminiData = await geminiResponse.json();
-    const content = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+    const groqData = await groqResponse.json();
+    const content = groqData.choices?.[0]?.message?.content;
 
     if (!content) {
       return new Response(JSON.stringify({ error: "Empty AI response" }), {
@@ -173,7 +217,11 @@ Retorne exatamente neste formato JSON (nada mais):
       });
     }
 
-    return new Response(JSON.stringify(parsed), {
+    // Enforce the requested count: trim extras, but never pad — if the model returned fewer,
+    // the user gets what was generated and can retry.
+    const trimmed = parsed.flashcards.slice(0, quantity);
+
+    return new Response(JSON.stringify({ flashcards: trimmed }), {
       status: 200,
       headers: corsHeaders,
     });

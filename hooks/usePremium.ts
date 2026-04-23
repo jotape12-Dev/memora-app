@@ -19,19 +19,22 @@ export function usePremium() {
   useEffect(() => {
     if (!profile || !isRevenueCatAvailable()) return;
 
-    // Check once on mount
-    checkPremiumStatus().then((rcPremium) => {
-      if (rcPremium !== null && rcPremium !== profile.is_premium) {
-        updateProfile({ is_premium: rcPremium });
+    const syncPremiumFromRevenueCat = async (rcPremium: boolean | null) => {
+      if (rcPremium !== true) return;
+
+      const currentPremium = useAuthStore.getState().profile?.is_premium ?? false;
+      if (!currentPremium) {
+        await updateProfile({ is_premium: true });
       }
-    });
+    };
+
+    // Check once on mount
+    checkPremiumStatus().then(syncPremiumFromRevenueCat);
 
     // Listen for changes (e.g. subscription expired, renewed)
     const unsubscribe = onCustomerInfoUpdated((info) => {
       const rcPremium = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
-      if (rcPremium !== profile.is_premium) {
-        updateProfile({ is_premium: rcPremium });
-      }
+      void syncPremiumFromRevenueCat(rcPremium);
     });
 
     return unsubscribe;

@@ -78,14 +78,11 @@ export async function getOfferings() {
 
   try {
     const offerings = await Purchases.getOfferings();
-    console.log("Offerings available:", Object.keys(offerings.all));
-    // Fallback to "defaut1" se estiver disponível e o current não tiver pacotes/regras
     if (offerings.all["defaut1"]) {
       return offerings.all["defaut1"];
     }
     return offerings.current;
-  } catch (err) {
-    console.warn("RevenueCat getOfferings error:", err);
+  } catch {
     return null;
   }
 }
