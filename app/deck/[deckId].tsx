@@ -51,6 +51,7 @@ export default function DeckDetailScreen() {
   const isErrorDeck = deck?.is_error_deck ?? false;
   const hasCards = flashcards.length > 0;
   const dueCount = deckDueCards.length;
+  const hasReviewedAtLeastOnce = (stats?.total_reviews ?? 0) > 0;
 
   const handleBack = () => {
     if (from === "generated") {
@@ -287,11 +288,22 @@ export default function DeckDetailScreen() {
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{deck.subject}</Text>
           )}
         </View>
-        {!isErrorDeck && (
-          <Pressable onPress={handleDeleteDeck}>
-            <Ionicons name="trash-outline" size={22} color={colors.error} />
-          </Pressable>
-        )}
+        <View style={styles.headerActions}>
+          {hasReviewedAtLeastOnce && (
+            <Pressable
+              onPress={() => router.push(`/review/${deckId}?mode=all`)}
+              hitSlop={8}
+              style={styles.headerActionButton}
+            >
+              <Ionicons name="play" size={20} color={colors.primary} />
+            </Pressable>
+          )}
+          {!isErrorDeck && (
+            <Pressable onPress={handleDeleteDeck} hitSlop={8}>
+              <Ionicons name="trash-outline" size={22} color={colors.error} />
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {/* Stats Bar */}
@@ -442,6 +454,18 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 20, fontWeight: "700", flex: 1 },
   subtitle: { fontSize: 13, marginTop: 2 },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  headerActionButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   statsBar: {
     flexDirection: "row",
     paddingHorizontal: 20,

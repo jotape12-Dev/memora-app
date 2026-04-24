@@ -22,34 +22,52 @@ import type { Flashcard, SM2Rating } from "../../types/database";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export default function ReviewScreen() {
-  const { deckId } = useLocalSearchParams<{ deckId: string }>();
+  const { deckId, mode } = useLocalSearchParams<{ deckId: string; mode?: string }>();
   const colors = useThemeColors();
-  const { deckDueCards, fetchDueCards, reviewCard, decks } = useDecksStore();
+  const reviewAllMode = mode === "all";
+  const { deckDueCards, flashcards, fetchDueCards, fetchFlashcardsByDeck, reviewCard, decks } = useDecksStore();
   const deckColor = decks.find((d) => d.id === deckId)?.color ?? "#01696f";
   const { createSession } = useReviewStore();
 
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
-  const [correct, setCorrect] = useState(0);
   const [finished, setFinished] = useState(false);
+  const [sessionReviewedCount, setSessionReviewedCount] = useState(0);
+  const [sessionCorrectCount, setSessionCorrectCount] = useState(0);
   const [startTime] = useState(Date.now());
 
   const confettiRef = useRef<ConfettiCannon>(null);
   const isRatingRef = useRef(false);
   const sessionSavedRef = useRef(false);
+  const reviewedOutcomesRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
     if (deckId) {
-      fetchDueCards(deckId).then(() => {});
+      setCards([]);
+      setCurrentIndex(0);
+      setFlipped(false);
+      setFinished(false);
+      setSessionReviewedCount(0);
+      setSessionCorrectCount(0);
+      sessionSavedRef.current = false;
+      isRatingRef.current = false;
+      reviewedOutcomesRef.current = {};
+
+      if (reviewAllMode) {
+        fetchFlashcardsByDeck(deckId).then(() => {});
+      } else {
+        fetchDueCards(deckId).then(() => {});
+      }
     }
-  }, [deckId, fetchDueCards]);
+  }, [deckId, reviewAllMode, fetchDueCards, fetchFlashcardsByDeck]);
 
   useEffect(() => {
-    if (deckDueCards.length > 0 && cards.length === 0) {
-      setCards([...deckDueCards]);
+    const sourceCards = reviewAllMode ? flashcards : deckDueCards;
+    if (sourceCards.length > 0 && cards.length === 0) {
+      setCards([...sourceCards]);
     }
-  }, [deckDueCards, cards.length]);
+  }, [deckDueCards, flashcards, reviewAllMode, cards.length]);
 
   const totalCards = cards.length;
   const currentCard = cards[currentIndex];
@@ -64,25 +82,27 @@ export default function ReviewScreen() {
       isRatingRef.current = true;
 
       try {
-        if (rating >= 3) {
-          setCorrect((prev) => prev + 1);
-        }
-
-        await reviewCard(currentCard, rating);
+        await reviewCard(currentCard, rating, reviewAllMode);
+        reviewedOutcomesRef.current[currentCard.id] = rating >= 3;
 
         if (currentIndex + 1 >= totalCards) {
           // Session complete
           const duration = Math.round((Date.now() - startTime) / 1000);
-          const finalCorrect = rating >= 3 ? correct + 1 : correct;
+          const outcomes = Object.values(reviewedOutcomesRef.current);
+          const reviewedCount = outcomes.length;
+          const finalCorrect = outcomes.filter(Boolean).length;
+
+          setSessionReviewedCount(reviewedCount);
+          setSessionCorrectCount(finalCorrect);
 
           if (!sessionSavedRef.current) {
             sessionSavedRef.current = true;
-            await createSession(deckId!, totalCards, finalCorrect, duration);
+            await createSession(deckId!, reviewedCount, finalCorrect, duration);
           }
 
           setFinished(true);
 
-          if (finalCorrect === totalCards) {
+          if (reviewedCount > 0 && finalCorrect === reviewedCount) {
             confettiRef.current?.start();
           }
         } else {
@@ -95,11 +115,15 @@ export default function ReviewScreen() {
         }
       }
     },
-    [currentCard, currentIndex, totalCards, correct, startTime, deckId, reviewCard, createSession]
+    [currentCard, currentIndex, totalCards, startTime, deckId, reviewAllMode, reviewCard, createSession]
   );
 
   const handleClose = () => {
     router.back();
+  };
+
+  const handleFinish = () => {
+    router.replace("/(tabs)");
   };
 
   if (cards.length === 0) {
@@ -111,8 +135,8 @@ export default function ReviewScreen() {
           <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
             Nenhum card pendente para revisão neste deck.
           </Text>
-          <Pressable onPress={handleClose} style={[styles.backBtn, { backgroundColor: colors.primary }]}>
-            <Text style={styles.backBtnText}>Voltar</Text>
+          <Pressable onPress={handleFinish} style={[styles.backBtn, { backgroundColor: colors.primary }]}>
+            <Text style={styles.backBtnText}>Continuar</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -123,7 +147,9 @@ export default function ReviewScreen() {
     const duration = Math.round((Date.now() - startTime) / 1000);
     const minutes = Math.floor(duration / 60);
     const seconds = duration % 60;
-    const percentage = totalCards > 0 ? Math.round((correct / totalCards) * 100) : 0;
+    const percentage = sessionReviewedCount > 0
+      ? Math.round((sessionCorrectCount / sessionReviewedCount) * 100)
+      : 0;
 
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -147,11 +173,11 @@ export default function ReviewScreen() {
           <View style={[styles.resultCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.resultRow}>
               <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Cards revisados</Text>
-              <Text style={[styles.resultValue, { color: colors.text }]}>{totalCards}</Text>
+              <Text style={[styles.resultValue, { color: colors.text }]}>{sessionReviewedCount}</Text>
             </View>
             <View style={styles.resultRow}>
               <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Acertos</Text>
-              <Text style={[styles.resultValue, { color: "#22c55e" }]}>{correct}</Text>
+              <Text style={[styles.resultValue, { color: "#22c55e" }]}>{sessionCorrectCount}</Text>
             </View>
             <View style={styles.resultRow}>
               <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Precisão</Text>
@@ -165,8 +191,8 @@ export default function ReviewScreen() {
             </View>
           </View>
 
-          <Pressable onPress={handleClose} style={[styles.backBtn, { backgroundColor: colors.primary }]}>
-            <Text style={styles.backBtnText}>Voltar</Text>
+          <Pressable onPress={handleFinish} style={[styles.backBtn, { backgroundColor: colors.primary }]}>
+            <Text style={styles.backBtnText}>Continuar</Text>
           </Pressable>
         </View>
       </SafeAreaView>

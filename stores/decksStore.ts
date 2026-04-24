@@ -1,12 +1,16 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
 import { normalizeDisplayName } from "../lib/displayName";
-import type { Deck, Flashcard, GeneratedFlashcard, SM2Rating, ErrorDeckCard } from "../types/database";
+import type { Deck, Flashcard, GeneratedFlashcard, SM2Rating } from "../types/database";
 import { calculateSM2 } from "../lib/sm2";
 
 interface ErrorDeckRow {
   flashcard_id: string;
   flashcards: Flashcard;
+}
+
+interface ErrorDeckCountRow {
+  flashcards: Pick<Flashcard, "next_review_at"> | null;
 }
 
 const MAX_CARDS_PER_SESSION = 50;
@@ -51,7 +55,7 @@ interface DecksState {
   addFlashcards: (deckId: string, cards: GeneratedFlashcard[]) => Promise<void>;
   updateFlashcard: (id: string, updates: Partial<Flashcard>) => Promise<void>;
   deleteFlashcard: (id: string) => Promise<void>;
-  reviewCard: (card: Flashcard, rating: SM2Rating) => Promise<void>;
+  reviewCard: (card: Flashcard, rating: SM2Rating, ignoreDueDate?: boolean) => Promise<void>;
 
   // AI Generation
   generatedCards: GeneratedFlashcard[];
@@ -275,25 +279,16 @@ export const useDecksStore = create<DecksState>((set, get) => ({
         });
       }
     } else if (rating === 3 || rating === 5) {
-      // Increment consecutive_correct; remove at 2
+      // A successful review removes the card from urgent list immediately.
       const { data: existing } = await supabase
         .from("error_deck_cards")
-        .select("*")
+        .select("id")
         .eq("flashcard_id", card.id)
         .eq("error_deck_id", errDeck.id)
         .maybeSingle();
 
       if (existing) {
-        const entry = existing as ErrorDeckCard;
-        const newCount = entry.consecutive_correct + 1;
-        if (newCount >= 2) {
-          await supabase.from("error_deck_cards").delete().eq("id", entry.id);
-        } else {
-          await supabase
-            .from("error_deck_cards")
-            .update({ consecutive_correct: newCount })
-            .eq("id", entry.id);
-        }
+        await supabase.from("error_deck_cards").delete().eq("id", existing.id);
       }
     }
 
@@ -332,7 +327,21 @@ export const useDecksStore = create<DecksState>((set, get) => ({
       }
     }
 
-    set({ errorDeckCardCount: count });
+    const today = new Date().toISOString().split("T")[0];
+    const { data: linkedRows, error: linkedError } = await supabase
+      .from("error_deck_cards")
+      .select("flashcards(next_review_at)")
+      .eq("error_deck_id", errDeck.id)
+      .returns<ErrorDeckCountRow[]>();
+
+    if (linkedError || !linkedRows) return;
+
+    const dueCount = linkedRows.reduce((acc, row) => {
+      if (!row.flashcards) return acc;
+      return row.flashcards.next_review_at <= today ? acc + 1 : acc;
+    }, 0);
+
+    set({ errorDeckCardCount: dueCount });
   },
 
   // ─── Flashcards ──────────────────────────────────────────
@@ -494,8 +503,8 @@ export const useDecksStore = create<DecksState>((set, get) => ({
     }
   },
 
-  reviewCard: async (card, rating) => {
-    const result = calculateSM2(card, rating);
+  reviewCard: async (card, rating, ignoreDueDate = false) => {
+    const result = calculateSM2(card, rating, { ignoreDueDate });
 
     const { error } = await supabase
       .from("flashcards")
@@ -508,16 +517,15 @@ export const useDecksStore = create<DecksState>((set, get) => ({
       })
       .eq("id", card.id);
 
-    if (!error) {
-      set((state) => ({
-        dueCards: state.dueCards.filter((f) => f.id !== card.id),
-        deckDueCards: state.deckDueCards.filter((f) => f.id !== card.id),
-      }));
+      if (!error) {
+        set((state) => ({
+          dueCards: state.dueCards.filter((f) => f.id !== card.id),
+          deckDueCards: state.deckDueCards.filter((f) => f.id !== card.id),
+        }));
 
-      // Error deck logic — runs in background
-      get().handleErrorDeckAfterReview(card, rating);
-    }
-  },
+        await get().handleErrorDeckAfterReview(card, rating);
+      }
+    },
 
   // ─── AI Generation ───────────────────────────────────────
   generatedCards: [],

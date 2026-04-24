@@ -36,9 +36,7 @@ export async function initRevenueCat(userId?: string): Promise<void> {
 
   const apiKey = Platform.OS === "ios" ? API_KEY_IOS : API_KEY_ANDROID;
 
-  if (__DEV__) {
-    Purchases.setLogLevel(LOG_LEVEL.DEBUG);
-  }
+  Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.WARN : LOG_LEVEL.INFO);
 
   Purchases.configure({ apiKey, appUserID: userId });
 }
