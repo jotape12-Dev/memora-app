@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import Purchases, {
   type PurchasesPackage,
   type CustomerInfo,
+  type PurchasesOffering,
   LOG_LEVEL,
 } from "react-native-purchases";
 import Constants from "expo-constants";
@@ -78,10 +79,19 @@ export async function getOfferings() {
 
   try {
     const offerings = await Purchases.getOfferings();
-    if (offerings.all["defaut1"]) {
-      return offerings.all["defaut1"];
+
+    if (offerings.current && offerings.current.availablePackages.length > 0) {
+      return offerings.current;
     }
-    return offerings.current;
+
+    const allOfferings = Object.values(offerings.all).filter(
+      (offering): offering is PurchasesOffering => Boolean(offering)
+    );
+    const firstWithPackages = allOfferings.find(
+      (offering) => offering.availablePackages.length > 0
+    );
+
+    return firstWithPackages ?? null;
   } catch {
     return null;
   }

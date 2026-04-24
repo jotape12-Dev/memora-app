@@ -14,6 +14,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
+import { File } from "expo-file-system";
 import { useThemeColors } from "../constants/theme";
 import { useDecksStore } from "../stores/decksStore";
 import { useAuthStore } from "../stores/authStore";
@@ -21,7 +23,9 @@ import { Button } from "../components/Button";
 import { GenerationLimitBadge } from "../components/GenerationLimitBadge";
 import { DismissKeyboard } from "../components/DismissKeyboard";
 
-type Tab = "camera" | "text";
+type Tab = "camera" | "text" | "pdf";
+
+const MAX_PDF_BYTES = 4 * 1024 * 1024; // 4 MB
 
 export default function CaptureScreen() {
   const colors = useThemeColors();
@@ -35,8 +39,12 @@ export default function CaptureScreen() {
   const [showDeckPicker, setShowDeckPicker] = useState(false);
   const [newDeckTitle, setNewDeckTitle] = useState("");
 
-  const { generateFromText, generating } = useDecksStore();
+  const { generateFromText, generateFromPdf, generating } = useDecksStore();
   const { decks, createDeck, fetchDecks } = useDecksStore();
+
+  const [pdfName, setPdfName] = useState<string | null>(null);
+  const [pdfSize, setPdfSize] = useState<number>(0);
+  const [pdfUri, setPdfUri] = useState<string | null>(null);
   const profile = useAuthStore((s) => s.profile);
   const fetchProfile = useAuthStore((s) => s.fetchProfile);
 
@@ -93,15 +101,53 @@ export default function CaptureScreen() {
     }
   };
 
-  const handleGenerate = async () => {
-    const inputText = activeTab === "camera" ? extractedText : text;
-    if (!inputText.trim() || inputText.trim().length < 50) {
-      Alert.alert("Texto muito curto", "O texto deve ter pelo menos 50 caracteres.");
+  const handlePickPdf = async () => {
+    const res = await DocumentPicker.getDocumentAsync({
+      type: "application/pdf",
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (res.canceled || !res.assets[0]) return;
+
+    const asset = res.assets[0];
+    const size = asset.size ?? 0;
+    if (size > MAX_PDF_BYTES) {
+      Alert.alert(
+        "PDF muito grande",
+        "O arquivo deve ter no máximo 4 MB. Tente um PDF menor ou dividi-lo em partes."
+      );
       return;
     }
 
+    setPdfName(asset.name);
+    setPdfSize(size);
+    setPdfUri(asset.uri);
+  };
+
+  const clearPdf = () => {
+    setPdfName(null);
+    setPdfSize(0);
+    setPdfUri(null);
+  };
+
+  const handleGenerate = async () => {
     if (!selectedDeckId) {
       Alert.alert("Selecione um deck", "Escolha ou crie um deck de destino.");
+      return;
+    }
+
+    if (activeTab === "pdf") {
+      if (!pdfUri) {
+        Alert.alert("Selecione um PDF", "Escolha um arquivo PDF para continuar.");
+        return;
+      }
+      await handleGeneratePdf();
+      return;
+    }
+
+    const inputText = activeTab === "camera" ? extractedText : text;
+    if (!inputText.trim() || inputText.trim().length < 50) {
+      Alert.alert("Texto muito curto", "O texto deve ter pelo menos 50 caracteres.");
       return;
     }
 
@@ -140,6 +186,73 @@ export default function CaptureScreen() {
     router.push({
       pathname: "/preview-cards",
       params: { deckId: selectedDeckId },
+    });
+  };
+
+  const handleGeneratePdf = async () => {
+    if (!pdfUri) return;
+
+    let base64: string;
+    try {
+      base64 = await new File(pdfUri).base64();
+    } catch {
+      Alert.alert("Erro", "Não foi possível ler o PDF. Tente outro arquivo.");
+      return;
+    }
+
+    const result = await generateFromPdf(base64);
+
+    if (result.error === "weekly_limit_reached") {
+      Alert.alert(
+        "Limite semanal atingido",
+        "Você atingiu o limite de 10 gerações semanais. Assine o Premium para gerações ilimitadas.",
+        [
+          { text: "Ver Premium", onPress: () => router.push("/paywall") },
+          { text: "OK" },
+        ]
+      );
+      return;
+    }
+
+    if (result.error === "service_unavailable") {
+      Alert.alert("Muita demanda agora", "Tente novamente em alguns minutos.");
+      return;
+    }
+
+    if (result.error === "pdf_too_large") {
+      Alert.alert("PDF muito grande", "O arquivo deve ter no máximo 4 MB.");
+      return;
+    }
+
+    if (result.error === "pdf_parse_failed") {
+      Alert.alert(
+        "PDF inválido",
+        "Não foi possível ler o conteúdo do PDF. Tente outro arquivo."
+      );
+      return;
+    }
+
+    if (result.error === "pdf_text_too_short") {
+      Alert.alert(
+        "Pouco texto no PDF",
+        "Este PDF não tem texto suficiente (pode ser só imagens). Tente outro arquivo."
+      );
+      return;
+    }
+
+    if (result.error) {
+      Alert.alert(
+        "Não foi possível gerar os cards",
+        "O serviço está temporariamente indisponível. Tente novamente em alguns minutos."
+      );
+      return;
+    }
+
+    await fetchProfile();
+
+    router.push({
+      pathname: "/preview-cards",
+      params: { deckId: selectedDeckId as string },
     });
   };
 
@@ -213,6 +326,27 @@ export default function CaptureScreen() {
               Colar texto
             </Text>
           </Pressable>
+          <Pressable
+            onPress={() => setActiveTab("pdf")}
+            style={[
+              styles.tab,
+              activeTab === "pdf" && { backgroundColor: colors.surface },
+            ]}
+          >
+            <Ionicons
+              name="document-attach"
+              size={18}
+              color={activeTab === "pdf" ? colors.primary : colors.textSecondary}
+            />
+            <Text
+              style={[
+                styles.tabText,
+                { color: activeTab === "pdf" ? colors.primary : colors.textSecondary },
+              ]}
+            >
+              PDF
+            </Text>
+          </Pressable>
         </View>
 
         {/* Camera Tab */}
@@ -277,6 +411,39 @@ export default function CaptureScreen() {
           </View>
         )}
 
+        {/* PDF Tab */}
+        {activeTab === "pdf" && (
+          <View style={styles.tabContent}>
+            {pdfName ? (
+              <View style={[styles.pdfCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Ionicons name="document-attach" size={28} color={colors.primary} />
+                <View style={styles.pdfInfo}>
+                  <Text style={[styles.pdfName, { color: colors.text }]} numberOfLines={1}>
+                    {pdfName}
+                  </Text>
+                  <Text style={[styles.pdfMeta, { color: colors.textSecondary }]}>
+                    {(pdfSize / 1024 / 1024).toFixed(2)} MB
+                  </Text>
+                </View>
+                <Pressable onPress={clearPdf} hitSlop={8}>
+                  <Ionicons name="close-circle" size={22} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                onPress={handlePickPdf}
+                style={[styles.pdfPicker, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              >
+                <Ionicons name="cloud-upload-outline" size={36} color={colors.primary} />
+                <Text style={[styles.pdfPickerTitle, { color: colors.text }]}>Selecionar PDF</Text>
+                <Text style={[styles.pdfPickerHint, { color: colors.textSecondary }]}>
+                  Arquivo de até 4 MB
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
         {/* Deck Picker */}
         <View style={styles.deckSection}>
           <Text style={[styles.label, { color: colors.text }]}>Deck de destino:</Text>
@@ -325,7 +492,11 @@ export default function CaptureScreen() {
             onPress={handleGenerate}
             loading={generating}
             disabled={
-              (activeTab === "camera" ? !extractedText.trim() : !text.trim()) || !selectedDeckId
+              (activeTab === "camera"
+                ? !extractedText.trim()
+                : activeTab === "text"
+                ? !text.trim()
+                : !pdfUri) || !selectedDeckId
             }
             icon={<Ionicons name="sparkles" size={18} color="#fff" />}
           />
@@ -433,6 +604,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   generateSection: { marginBottom: 16 },
+  pdfPicker: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 36,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    gap: 8,
+  },
+  pdfPickerTitle: { fontSize: 15, fontWeight: "600" },
+  pdfPickerHint: { fontSize: 12 },
+  pdfCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  pdfInfo: { flex: 1 },
+  pdfName: { fontSize: 14, fontWeight: "600" },
+  pdfMeta: { fontSize: 12, marginTop: 2 },
   premiumLink: {
     flexDirection: "row",
     alignItems: "center",

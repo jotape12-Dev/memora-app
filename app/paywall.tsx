@@ -144,6 +144,11 @@ export default function PaywallScreen() {
   };
 
   const hasPackages = monthlyPackage !== null || annualPackage !== null;
+  const unavailableMessage = !rcAvailable
+    ? "Pagamentos não disponíveis neste ambiente. Use um build de produção."
+    : __DEV__
+    ? "Configuração do RevenueCat incompleta. Adicione pacotes à offering 'default' no painel do RevenueCat."
+    : "Planos indisponíveis no momento. Tente novamente mais tarde.";
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -181,13 +186,11 @@ export default function PaywallScreen() {
           <ActivityIndicator color={colors.primary} style={{ marginBottom: 24 }} />
         ) : !hasPackages ? (
           <View style={[styles.unavailableCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Ionicons name="information-circle-outline" size={20} color={colors.textSecondary} />
-            <Text style={[styles.unavailableText, { color: colors.textSecondary }]}>
-              {rcAvailable
-                ? "Planos indisponíveis no momento. Tente novamente mais tarde."
-                : "Pagamentos não disponíveis neste ambiente. Use um build de produção."}
-            </Text>
-          </View>
+              <Ionicons name="information-circle-outline" size={20} color={colors.textSecondary} />
+              <Text style={[styles.unavailableText, { color: colors.textSecondary }]}>
+                {unavailableMessage}
+              </Text>
+            </View>
         ) : (
           <View style={styles.plans}>
             {annualPackage && (

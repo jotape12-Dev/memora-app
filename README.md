@@ -38,8 +38,9 @@ Preencha com suas chaves do Supabase e RevenueCat.
 3. Deploy as Edge Functions:
 
 ```bash
-supabase functions deploy generate-from-text
-supabase functions deploy generate-from-topic
+supabase functions deploy generate-from-text --no-verify-jwt
+supabase functions deploy generate-from-topic --no-verify-jwt
+supabase functions deploy generate-from-pdf --no-verify-jwt
 ```
 
 4. Configure os secrets nas Edge Functions:
@@ -48,7 +49,21 @@ supabase functions deploy generate-from-topic
 supabase secrets set GROQ_API_KEY=your-key
 ```
 
-O secret `GROQ_API_KEY` é obrigatório — as Edge Functions `generate-from-text` e `generate-from-topic` usam a Groq API (modelo `llama-3.1-8b-instant`) para gerar flashcards.
+O secret `GROQ_API_KEY` é obrigatório — as Edge Functions `generate-from-text`, `generate-from-topic` e `generate-from-pdf` usam a Groq API (modelo `llama-3.1-8b-instant`) para gerar flashcards.
+
+### Conceder Premium manualmente (conta interna/admin)
+
+Para uma conta específica ficar premium permanentemente sem compra na loja, aplique a migration `supabase/migrations/003_manual_premium_grant.sql` e execute no SQL Editor do Supabase:
+
+```sql
+select public.set_account_premium_by_email('seu-email@exemplo.com', true);
+```
+
+Para revogar depois:
+
+```sql
+select public.set_account_premium_by_email('seu-email@exemplo.com', false);
+```
 
 ### 4. Execute o app
 
@@ -59,6 +74,14 @@ npx expo start
 - Pressione `i` para iOS Simulator
 - Pressione `a` para Android Emulator
 - Escaneie o QR code com o Expo Go
+
+### RevenueCat (paywall)
+
+Se aparecer o erro `RevenueCat SDK Configuration is not valid` com `Offering 'default' has no packages configured`, ajuste no painel do RevenueCat:
+
+1. Crie/importe os produtos da loja (mensal e anual).
+2. Vincule esses produtos aos packages da offering `default` (por exemplo: `monthly` e `annual`).
+3. Garanta que a entitlement `premium` esteja ligada aos produtos.
 
 ## Estrutura do Projeto
 

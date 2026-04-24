@@ -58,6 +58,7 @@ interface DecksState {
   generating: boolean;
   generateFromText: (text: string, quantity?: number) => Promise<{ error?: string }>;
   generateFromTopic: (topic: string, quantity?: number, level?: string, language?: string, additionalContext?: string) => Promise<{ error?: string }>;
+  generateFromPdf: (pdfBase64: string, quantity?: number) => Promise<{ error?: string }>;
   setGeneratedCards: (cards: GeneratedFlashcard[]) => void;
   clearGeneratedCards: () => void;
   reset: () => void;
@@ -572,6 +573,39 @@ export const useDecksStore = create<DecksState>((set, get) => ({
         } catch { /* ignore */ }
 
         if (errMsg === "premium_required") return { error: "premium_required" };
+        return { error: errMsg };
+      }
+
+      if (data?.flashcards && Array.isArray(data.flashcards)) {
+        set({ generatedCards: data.flashcards });
+        return {};
+      }
+
+      return { error: "Invalid response from AI" };
+    } catch {
+      return { error: "Failed to generate flashcards" };
+    } finally {
+      set({ generating: false });
+    }
+  },
+
+  generateFromPdf: async (pdfBase64, quantity = 10) => {
+    set({ generating: true });
+    try {
+      const { data, error } = await supabase.functions.invoke<{ flashcards?: GeneratedFlashcard[]; error?: string }>(
+        "generate-from-pdf",
+        { body: { pdfBase64, quantity } }
+      );
+
+      if (error) {
+        let errMsg = "AI generation failed";
+        try {
+          const body = await (error as { context?: Response }).context?.json();
+          if (body?.error) errMsg = body.error;
+          else if (body?.message) errMsg = body.message;
+        } catch { /* ignore */ }
+
+        if (errMsg === "weekly_limit_reached") return { error: "weekly_limit_reached" };
         return { error: errMsg };
       }
 

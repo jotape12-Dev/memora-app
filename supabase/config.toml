@@ -43,6 +43,9 @@ verify_jwt = false
 [functions.generate-from-topic]
 verify_jwt = false
 
+[functions.generate-from-pdf]
+verify_jwt = false
+
 [functions.delete-account]
 verify_jwt = false
 
