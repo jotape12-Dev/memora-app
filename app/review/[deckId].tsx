@@ -17,14 +17,16 @@ import { useReviewStore } from "../../stores/reviewStore";
 import { FlashCard } from "../../components/FlashCard";
 import { RatingButtons } from "../../components/RatingButton";
 import { ProgressBar } from "../../components/ProgressBar";
+import { loadShuffleState } from "../../lib/deckShuffle";
 import type { Flashcard, SM2Rating } from "../../types/database";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export default function ReviewScreen() {
-  const { deckId, mode } = useLocalSearchParams<{ deckId: string; mode?: string }>();
+  const { deckId, mode, cardId } = useLocalSearchParams<{ deckId: string; mode?: string; cardId?: string }>();
   const colors = useThemeColors();
-  const reviewAllMode = mode === "all";
+  const singleCardMode = mode === "single" && !!cardId;
+  const reviewAllMode = mode === "all" || singleCardMode;
   const { deckDueCards, flashcards, fetchDueCards, fetchFlashcardsByDeck, reviewCard, decks } = useDecksStore();
   const deckColor = decks.find((d) => d.id === deckId)?.color ?? "#01696f";
   const { createSession } = useReviewStore();
@@ -64,10 +66,36 @@ export default function ReviewScreen() {
 
   useEffect(() => {
     const sourceCards = reviewAllMode ? flashcards : deckDueCards;
-    if (sourceCards.length > 0 && cards.length === 0) {
-      setCards([...sourceCards]);
+    if (sourceCards.length === 0 || cards.length > 0) return;
+
+    if (singleCardMode) {
+      const found = sourceCards.find((c) => c.id === cardId);
+      setCards(found ? [found] : []);
+      return;
     }
-  }, [deckDueCards, flashcards, reviewAllMode, cards.length]);
+
+    let prepared = [...sourceCards];
+    if (deckId) {
+      loadShuffleState(deckId).then((state) => {
+        if (!state.enabled || state.order.length === 0) {
+          setCards(prepared);
+          return;
+        }
+        const indexOf = new Map(state.order.map((id, i) => [id, i]));
+        prepared = prepared.sort((a, b) => {
+          const ia = indexOf.get(a.id);
+          const ib = indexOf.get(b.id);
+          if (ia === undefined && ib === undefined) return 0;
+          if (ia === undefined) return 1;
+          if (ib === undefined) return -1;
+          return ia - ib;
+        });
+        setCards(prepared);
+      });
+    } else {
+      setCards(prepared);
+    }
+  }, [deckDueCards, flashcards, reviewAllMode, singleCardMode, cardId, deckId, cards.length]);
 
   const totalCards = cards.length;
   const currentCard = cards[currentIndex];

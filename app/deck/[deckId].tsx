@@ -1,8 +1,7 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
-  FlatList,
   Pressable,
   Alert,
   Modal,
@@ -14,6 +13,7 @@ import {
   Keyboard,
   ActivityIndicator,
 } from "react-native";
+import Animated, { LinearTransition } from "react-native-reanimated";
 import { useLocalSearchParams, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,6 +23,13 @@ import { useDecksStore } from "../../stores/decksStore";
 import { supabase } from "../../lib/supabase";
 import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
+import {
+  loadShuffleState,
+  saveShuffleState,
+  shuffleIds,
+  reconcileOrder,
+  type ShuffleState,
+} from "../../lib/deckShuffle";
 import type { Flashcard, DeckStats } from "../../types/database";
 
 export default function DeckDetailScreen() {
@@ -46,6 +53,7 @@ export default function DeckDetailScreen() {
   const [stats, setStats] = useState<DeckStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [shuffle, setShuffle] = useState<ShuffleState>({ enabled: false, order: [] });
 
   const deck = decks.find((d) => d.id === deckId);
   const isErrorDeck = deck?.is_error_deck ?? false;
@@ -76,8 +84,39 @@ export default function DeckDetailScreen() {
       fetchFlashcardsByDeck(deckId);
       fetchDueCards(deckId);
       fetchStats();
+      loadShuffleState(deckId).then(setShuffle);
     }
   }, [deckId, fetchFlashcardsByDeck, fetchDueCards, fetchStats]);
+
+  const orderedFlashcards = useMemo(() => {
+    if (!shuffle.enabled || flashcards.length === 0) return flashcards;
+    const cardMap = new Map(flashcards.map((c) => [c.id, c]));
+    const synced = reconcileOrder(shuffle.order, flashcards.map((c) => c.id));
+    const result: Flashcard[] = [];
+    for (const id of synced) {
+      const card = cardMap.get(id);
+      if (card) result.push(card);
+    }
+    return result;
+  }, [shuffle, flashcards]);
+
+  const handleToggleShuffle = useCallback(async () => {
+    if (!deckId) return;
+    const ids = flashcards.map((c) => c.id);
+    const next: ShuffleState = shuffle.enabled
+      ? { enabled: false, order: [] }
+      : { enabled: true, order: shuffleIds(ids) };
+    setShuffle(next);
+    await saveShuffleState(deckId, next);
+  }, [deckId, flashcards, shuffle.enabled]);
+
+  const handleReviewSingleCard = useCallback(
+    (cardId: string) => {
+      if (!deckId) return;
+      router.push(`/review/${deckId}?mode=single&cardId=${cardId}`);
+    },
+    [deckId]
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -138,7 +177,10 @@ export default function DeckDetailScreen() {
     const isDue = item.next_review_at <= new Date().toISOString().split("T")[0];
     return (
       <Swipeable renderRightActions={() => renderDeleteCardAction(item)} overshootRight={false}>
-        <Pressable style={[styles.cardItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Pressable
+          onPress={() => handleReviewSingleCard(item.id)}
+          style={[styles.cardItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
           <View style={styles.cardContent}>
             <Text style={[styles.cardQuestion, { color: colors.text }]} numberOfLines={2}>
               {item.question}
@@ -298,6 +340,22 @@ export default function DeckDetailScreen() {
               <Ionicons name="play" size={20} color={colors.primary} />
             </Pressable>
           )}
+          {hasCards && (
+            <Pressable
+              onPress={handleToggleShuffle}
+              hitSlop={8}
+              style={[
+                styles.headerActionButton,
+                shuffle.enabled && { backgroundColor: colors.primaryHighlight },
+              ]}
+            >
+              <Ionicons
+                name="shuffle"
+                size={20}
+                color={shuffle.enabled ? colors.primary : colors.textSecondary}
+              />
+            </Pressable>
+          )}
           {!isErrorDeck && (
             <Pressable onPress={handleDeleteDeck} hitSlop={8}>
               <Ionicons name="trash-outline" size={22} color={colors.error} />
@@ -335,9 +393,10 @@ export default function DeckDetailScreen() {
       {renderStatsSection()}
 
       {/* Cards List */}
-      <FlatList
-        data={flashcards}
+      <Animated.FlatList
+        data={orderedFlashcards}
         keyExtractor={(item) => item.id}
+        itemLayoutAnimation={LinearTransition.duration(350)}
         contentContainerStyle={[styles.list, !isErrorDeck && !hasCards && styles.listWithoutFab]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
