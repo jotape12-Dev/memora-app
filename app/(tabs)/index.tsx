@@ -24,6 +24,7 @@ import { GenerationLimitBadge } from "../../components/GenerationLimitBadge";
 import { EmptyState } from "../../components/EmptyState";
 import { DeckCard } from "../../components/DeckCard";
 import { Button } from "../../components/Button";
+import { ShareStoryModal } from "../../components/ShareStoryModal";
 import { DeckColors } from "../../constants/colors";
 import { supabase } from "../../lib/supabase";
 import type { HomeStats } from "../../types/database";
@@ -50,6 +51,7 @@ export default function HomeScreen() {
   const [subject, setSubject] = useState("");
   const [selectedColor, setSelectedColor] = useState(DeckColors[0]);
   const [homeStats, setHomeStats] = useState<HomeStats | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const handleCreate = async () => {
     if (!title.trim()) {
@@ -245,7 +247,19 @@ export default function HomeScreen() {
         {/* Weekly Chart */}
         {chartData.maxCount > 0 && (
           <View style={[styles.chartCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.chartTitle, { color: colors.text }]}>Últimos 7 dias</Text>
+            <View style={styles.chartHeaderRow}>
+              <Text style={[styles.chartTitle, { color: colors.text }]}>Últimos 7 dias</Text>
+              {(homeStats?.today_reviewed ?? 0) > 0 && (
+                <Pressable
+                  onPress={() => setShowShareModal(true)}
+                  hitSlop={8}
+                  style={[styles.chartShareBtn, { borderColor: colors.primary }]}
+                >
+                  <Ionicons name="share-outline" size={14} color={colors.primary} />
+                  <Text style={[styles.chartShareText, { color: colors.primary }]}>Compartilhar</Text>
+                </Pressable>
+              )}
+            </View>
             <View style={styles.chartBars}>
               {chartData.days.map((day) => {
                 const barHeight = chartData.maxCount > 0
@@ -403,6 +417,8 @@ export default function HomeScreen() {
           </Pressable>
         </KeyboardAvoidingView>
       </Modal>
+
+      <ShareStoryModal visible={showShareModal} onClose={() => setShowShareModal(false)} />
     </SafeAreaView>
   );
 }
@@ -486,6 +502,25 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingBottom: 16,
   },
+  chartHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  chartShareBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  chartShareText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
   kpiCard: {
     alignItems: "center",
     paddingVertical: 14,
@@ -504,7 +539,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  chartTitle: { fontSize: 14, fontWeight: "600", marginBottom: 12 },
+  chartTitle: { fontSize: 14, fontWeight: "600" },
   chartBars: {
     flexDirection: "row",
     justifyContent: "space-between",

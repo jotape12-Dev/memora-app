@@ -2,7 +2,7 @@
   "expo": {
     "name": "Memora",
     "slug": "Memora",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -11,14 +11,18 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.jotape.memora.app",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "config": {
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
         "NSCameraUsageDescription": "O Memora usa a câmera para fotografar textos e gerar flashcards automaticamente.",
         "NSPhotoLibraryUsageDescription": "O Memora acessa a galeria para importar imagens de texto para gerar flashcards.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": [
+          "instagram",
+          "instagram-stories"
+        ]
       },
       "appleTeamId": "6F2KGULZ85"
     },
@@ -29,7 +33,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.jotape.memora.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "permissions": [
         "android.permission.CAMERA"
       ]
@@ -74,7 +78,8 @@
         {
           "cameraPermissionText": "O Memora usa a câmera para fotografar textos e gerar flashcards automaticamente."
         }
-      ]
+      ],
+      ["react-native-share", {}]
     ]
   }
 }
