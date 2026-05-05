@@ -22,6 +22,7 @@ import { useAuthStore } from "../stores/authStore";
 import { Button } from "../components/Button";
 import { GenerationLimitBadge } from "../components/GenerationLimitBadge";
 import { DismissKeyboard } from "../components/DismissKeyboard";
+import { ScreenContainer } from "../components/ScreenContainer";
 
 type Tab = "camera" | "text" | "pdf";
 
@@ -268,6 +269,7 @@ export default function CaptureScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={["top"]}>
+      <ScreenContainer>
       <DismissKeyboard>
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -513,6 +515,7 @@ export default function CaptureScreen() {
         )}
       </ScrollView>
       </DismissKeyboard>
+      </ScreenContainer>
     </SafeAreaView>
   );
 }

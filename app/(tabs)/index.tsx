@@ -26,6 +26,8 @@ import { DeckCard } from "../../components/DeckCard";
 import { Button } from "../../components/Button";
 import { ShareStoryModal } from "../../components/ShareStoryModal";
 import { DeckColors } from "../../constants/colors";
+import { ScreenContainer } from "../../components/ScreenContainer";
+import { useLayout, MAX_MODAL_WIDTH } from "../../hooks/useLayout";
 import { supabase } from "../../lib/supabase";
 import type { HomeStats } from "../../types/database";
 
@@ -41,6 +43,7 @@ function formatDuration(seconds: number): string {
 
 export default function HomeScreen() {
   const colors = useThemeColors();
+  const { isTablet } = useLayout();
   const profile = useAuthStore((s) => s.profile);
   const { decks, fetchDecks, createDeck, errorDeckCardCount, fetchErrorDeckCount } = useDecksStore();
   const { dueCards, fetchAllDueCards } = useDecksStore();
@@ -138,11 +141,13 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={["top"]}>
+      <ScreenContainer>
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
+        showsVerticalScrollIndicator={false}
       >
         {/* Error Deck Alert Banner */}
         {errorDeck && errorDeckCardCount > 0 && (
@@ -352,6 +357,7 @@ export default function HomeScreen() {
           )}
         </View>
       </ScrollView>
+      </ScreenContainer>
 
       {/* FABs: only when user already has at least one deck */}
       {regularDecks.length > 0 && (
@@ -370,13 +376,13 @@ export default function HomeScreen() {
           style={{ flex: 1 }}
         >
           <Pressable
-            style={styles.modalOverlay}
+            style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}
             onPress={() => {
               Keyboard.dismiss();
               setShowModal(false);
             }}
           >
-            <Pressable style={[styles.modalContent, { backgroundColor: colors.surface }]} onPress={() => {}}>
+            <Pressable style={[styles.modalContent, isTablet && styles.modalContentTablet, { backgroundColor: colors.surface }]} onPress={() => {}}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>Novo Deck</Text>
 
               <TextInput
@@ -618,11 +624,21 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
   },
+  modalOverlayTablet: {
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
   modalContent: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 24,
     gap: 12,
+  },
+  modalContentTablet: {
+    borderRadius: 20,
+    maxWidth: MAX_MODAL_WIDTH,
+    alignSelf: "center" as const,
+    width: "100%",
   },
   modalTitle: { fontSize: 20, fontWeight: "700", marginBottom: 4 },
   input: {

@@ -17,6 +17,7 @@ import { useThemeColors } from "../../constants/theme";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { DismissKeyboard } from "../../components/DismissKeyboard";
+import { ScreenContainer } from "../../components/ScreenContainer";
 
 export default function LoginScreen() {
   const colors = useThemeColors();
@@ -80,6 +81,7 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <ScreenContainer>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flex}
@@ -149,6 +151,7 @@ export default function LoginScreen() {
         </ScrollView>
         </DismissKeyboard>
       </KeyboardAvoidingView>
+      </ScreenContainer>
     </SafeAreaView>
   );
 }

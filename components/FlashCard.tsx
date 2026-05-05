@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { View, Text, Pressable, StyleSheet, Dimensions } from "react-native";
+import { View, Text, Pressable, StyleSheet, useWindowDimensions } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -17,11 +17,12 @@ interface FlashCardProps {
   deckColor?: string;
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const CARD_WIDTH = SCREEN_WIDTH - 48;
+const MAX_CARD_WIDTH = 560;
 
 export function FlashCard({ question, answer, flipped = false, onFlip, deckColor }: FlashCardProps) {
   const colors = useThemeColors();
+  const { width: screenWidth } = useWindowDimensions();
+  const cardWidth = Math.min(screenWidth - 48, MAX_CARD_WIDTH);
   const rotation = useSharedValue(flipped ? 180 : 0);
 
   React.useEffect(() => {
@@ -52,7 +53,7 @@ export function FlashCard({ question, answer, flipped = false, onFlip, deckColor
   }, [onFlip]);
 
   return (
-    <Pressable onPress={handlePress} style={styles.container}>
+    <Pressable onPress={handlePress} style={[styles.container, { width: cardWidth }]}>
       <Animated.View
         style={[
           styles.card,
@@ -84,7 +85,6 @@ export function FlashCard({ question, answer, flipped = false, onFlip, deckColor
 
 const styles = StyleSheet.create({
   container: {
-    width: CARD_WIDTH,
     height: 300,
     alignSelf: "center",
   },

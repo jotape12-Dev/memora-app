@@ -22,6 +22,7 @@ import {
   restorePurchases,
 } from "../lib/revenuecat";
 import { Button } from "../components/Button";
+import { ScreenContainer } from "../components/ScreenContainer";
 
 type Plan = "monthly" | "annual";
 
@@ -152,11 +153,12 @@ export default function PaywallScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Close button */}
-        <Pressable onPress={() => router.back()} style={styles.closeBtn}>
-          <Ionicons name="close" size={24} color={colors.text} />
-        </Pressable>
+      <ScreenContainer>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          {/* Close button */}
+          <Pressable onPress={() => router.back()} style={styles.closeBtn}>
+            <Ionicons name="close" size={24} color={colors.text} />
+          </Pressable>
 
         {/* Header */}
         <View style={styles.header}>
@@ -282,7 +284,8 @@ export default function PaywallScreen() {
             <Text style={[styles.legalText, { color: colors.textSecondary }]}>Política de Privacidade</Text>
           </Pressable>
         </View>
-      </ScrollView>
+        </ScrollView>
+      </ScreenContainer>
     </SafeAreaView>
   );
 }

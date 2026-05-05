@@ -17,6 +17,7 @@ import { MAX_DISPLAY_NAME_LENGTH } from "../../constants/limits";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { DismissKeyboard } from "../../components/DismissKeyboard";
+import { ScreenContainer } from "../../components/ScreenContainer";
 
 export default function RegisterScreen() {
   const colors = useThemeColors();
@@ -51,6 +52,7 @@ export default function RegisterScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <ScreenContainer>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flex}
@@ -115,6 +117,7 @@ export default function RegisterScreen() {
         </ScrollView>
         </DismissKeyboard>
       </KeyboardAvoidingView>
+      </ScreenContainer>
     </SafeAreaView>
   );
 }

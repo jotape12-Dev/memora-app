@@ -5,7 +5,7 @@ import {
   Pressable,
   StyleSheet,
   Alert,
-  Dimensions,
+  useWindowDimensions,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -17,14 +17,14 @@ import { useReviewStore } from "../../stores/reviewStore";
 import { FlashCard } from "../../components/FlashCard";
 import { RatingButtons } from "../../components/RatingButton";
 import { ProgressBar } from "../../components/ProgressBar";
+import { ScreenContainer } from "../../components/ScreenContainer";
 import { loadShuffleState } from "../../lib/deckShuffle";
 import type { Flashcard, SM2Rating } from "../../types/database";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export default function ReviewScreen() {
   const { deckId, mode, cardId } = useLocalSearchParams<{ deckId: string; mode?: string; cardId?: string }>();
   const colors = useThemeColors();
+  const { width: screenWidth } = useWindowDimensions();
   const singleCardMode = mode === "single" && !!cardId;
   const reviewAllMode = mode === "all" || singleCardMode;
   const { deckDueCards, flashcards, fetchDueCards, fetchFlashcardsByDeck, reviewCard, decks } = useDecksStore();
@@ -157,16 +157,18 @@ export default function ReviewScreen() {
   if (cards.length === 0) {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-        <View style={styles.centered}>
-          <Ionicons name="checkmark-circle" size={64} color={colors.primary} />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>Tudo em dia!</Text>
-          <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
-            Nenhum card pendente para revisão neste deck.
-          </Text>
-          <Pressable onPress={handleFinish} style={[styles.backBtn, { backgroundColor: colors.primary }]}>
-            <Text style={styles.backBtnText}>Continuar</Text>
-          </Pressable>
-        </View>
+        <ScreenContainer>
+          <View style={styles.centered}>
+            <Ionicons name="checkmark-circle" size={64} color={colors.primary} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>Tudo em dia!</Text>
+            <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
+              Nenhum card pendente para revisão neste deck.
+            </Text>
+            <Pressable onPress={handleFinish} style={[styles.backBtn, { backgroundColor: colors.primary }]}>
+              <Text style={styles.backBtnText}>Continuar</Text>
+            </Pressable>
+          </View>
+        </ScreenContainer>
       </SafeAreaView>
     );
   }
@@ -184,97 +186,101 @@ export default function ReviewScreen() {
         <ConfettiCannon
           ref={confettiRef}
           count={100}
-          origin={{ x: SCREEN_WIDTH / 2, y: -10 }}
+          origin={{ x: screenWidth / 2, y: -10 }}
           autoStart={false}
           fadeOut
         />
-        <View style={styles.centered}>
-          <Ionicons
-            name={percentage === 100 ? "trophy" : "checkmark-circle"}
-            size={64}
-            color={percentage === 100 ? "#f59e0b" : colors.primary}
-          />
-          <Text style={[styles.finishTitle, { color: colors.text }]}>
-            {percentage === 100 ? "Perfeito!" : "Sessão concluída!"}
-          </Text>
+        <ScreenContainer>
+          <View style={styles.centered}>
+            <Ionicons
+              name={percentage === 100 ? "trophy" : "checkmark-circle"}
+              size={64}
+              color={percentage === 100 ? "#f59e0b" : colors.primary}
+            />
+            <Text style={[styles.finishTitle, { color: colors.text }]}>
+              {percentage === 100 ? "Perfeito!" : "Sessão concluída!"}
+            </Text>
 
-          <View style={[styles.resultCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={styles.resultRow}>
-              <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Cards revisados</Text>
-              <Text style={[styles.resultValue, { color: colors.text }]}>{sessionReviewedCount}</Text>
+            <View style={[styles.resultCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.resultRow}>
+                <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Cards revisados</Text>
+                <Text style={[styles.resultValue, { color: colors.text }]}>{sessionReviewedCount}</Text>
+              </View>
+              <View style={styles.resultRow}>
+                <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Acertos</Text>
+                <Text style={[styles.resultValue, { color: "#22c55e" }]}>{sessionCorrectCount}</Text>
+              </View>
+              <View style={styles.resultRow}>
+                <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Precisão</Text>
+                <Text style={[styles.resultValue, { color: colors.text }]}>{percentage}%</Text>
+              </View>
+              <View style={styles.resultRow}>
+                <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Tempo</Text>
+                <Text style={[styles.resultValue, { color: colors.text }]}>
+                  {minutes > 0 ? `${minutes}m ` : ""}{seconds}s
+                </Text>
+              </View>
             </View>
-            <View style={styles.resultRow}>
-              <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Acertos</Text>
-              <Text style={[styles.resultValue, { color: "#22c55e" }]}>{sessionCorrectCount}</Text>
-            </View>
-            <View style={styles.resultRow}>
-              <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Precisão</Text>
-              <Text style={[styles.resultValue, { color: colors.text }]}>{percentage}%</Text>
-            </View>
-            <View style={styles.resultRow}>
-              <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Tempo</Text>
-              <Text style={[styles.resultValue, { color: colors.text }]}>
-                {minutes > 0 ? `${minutes}m ` : ""}{seconds}s
-              </Text>
-            </View>
+
+            <Pressable onPress={handleFinish} style={[styles.backBtn, { backgroundColor: colors.primary }]}>
+              <Text style={styles.backBtnText}>Continuar</Text>
+            </Pressable>
           </View>
-
-          <Pressable onPress={handleFinish} style={[styles.backBtn, { backgroundColor: colors.primary }]}>
-            <Text style={styles.backBtnText}>Continuar</Text>
-          </Pressable>
-        </View>
+        </ScreenContainer>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={() => {
-          Alert.alert("Sair da revisão?", "Seu progresso nesta sessão será perdido.", [
-            { text: "Continuar", style: "cancel" },
-            { text: "Sair", style: "destructive", onPress: handleClose },
-          ]);
-        }}>
-          <Ionicons name="close" size={24} color={colors.text} />
-        </Pressable>
-        <View style={styles.progressContainer}>
-          <ProgressBar current={currentIndex + 1} total={totalCards} />
-        </View>
-      </View>
-
-      {/* Card */}
-      <View style={styles.cardContainer}>
-        {currentCard && (
-          <FlashCard
-            question={currentCard.question}
-            answer={currentCard.answer}
-            flipped={flipped}
-            onFlip={handleFlip}
-            deckColor={deckColor}
-          />
-        )}
-      </View>
-
-      {/* Actions */}
-      <View style={[styles.actions, {
-        backgroundColor: colors.background,
-        borderTopColor: colors.border,
-      }]}>
-        {!flipped ? (
-          <Pressable
-            onPress={handleFlip}
-            style={[styles.showAnswerBtn, { backgroundColor: colors.primary }]}
-          >
-            <Text style={styles.showAnswerText}>Ver resposta</Text>
+      <ScreenContainer>
+        {/* Header */}
+        <View style={styles.header}>
+          <Pressable onPress={() => {
+            Alert.alert("Sair da revisão?", "Seu progresso nesta sessão será perdido.", [
+              { text: "Continuar", style: "cancel" },
+              { text: "Sair", style: "destructive", onPress: handleClose },
+            ]);
+          }}>
+            <Ionicons name="close" size={24} color={colors.text} />
           </Pressable>
-        ) : (
-          <View pointerEvents={isRatingRef.current ? "none" : "auto"} style={isRatingRef.current ? styles.disabled : undefined}>
-            <RatingButtons onRate={handleRate} />
+          <View style={styles.progressContainer}>
+            <ProgressBar current={currentIndex + 1} total={totalCards} />
           </View>
-        )}
-      </View>
+        </View>
+
+        {/* Card */}
+        <View style={styles.cardContainer}>
+          {currentCard && (
+            <FlashCard
+              question={currentCard.question}
+              answer={currentCard.answer}
+              flipped={flipped}
+              onFlip={handleFlip}
+              deckColor={deckColor}
+            />
+          )}
+        </View>
+
+        {/* Actions */}
+        <View style={[styles.actions, {
+          backgroundColor: colors.background,
+          borderTopColor: colors.border,
+        }]}>
+          {!flipped ? (
+            <Pressable
+              onPress={handleFlip}
+              style={[styles.showAnswerBtn, { backgroundColor: colors.primary }]}
+            >
+              <Text style={styles.showAnswerText}>Ver resposta</Text>
+            </Pressable>
+          ) : (
+            <View pointerEvents={isRatingRef.current ? "none" : "auto"} style={isRatingRef.current ? styles.disabled : undefined}>
+              <RatingButtons onRate={handleRate} />
+            </View>
+          )}
+        </View>
+      </ScreenContainer>
     </SafeAreaView>
   );
 }

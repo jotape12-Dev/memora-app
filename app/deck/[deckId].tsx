@@ -23,6 +23,8 @@ import { useDecksStore } from "../../stores/decksStore";
 import { supabase } from "../../lib/supabase";
 import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
+import { ScreenContainer } from "../../components/ScreenContainer";
+import { useLayout, MAX_MODAL_WIDTH } from "../../hooks/useLayout";
 import {
   loadShuffleState,
   saveShuffleState,
@@ -35,6 +37,7 @@ import type { Flashcard, DeckStats } from "../../types/database";
 export default function DeckDetailScreen() {
   const { deckId, from } = useLocalSearchParams<{ deckId: string; from?: string }>();
   const colors = useThemeColors();
+  const { isTablet } = useLayout();
   const { decks, deleteDeck } = useDecksStore();
   const {
     flashcards,
@@ -303,17 +306,20 @@ export default function DeckDetailScreen() {
   if (!deck) {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-        <View style={styles.centered}>
-          <Text style={{ color: colors.text }}>Deck não encontrado</Text>
-        </View>
+        <ScreenContainer>
+          <View style={styles.centered}>
+            <Text style={{ color: colors.text }}>Deck não encontrado</Text>
+          </View>
+        </ScreenContainer>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <ScreenContainer>
         {/* Header */}
-      <View style={styles.header}>
+        <View style={styles.header}>
         <Pressable onPress={handleBack}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
@@ -362,10 +368,10 @@ export default function DeckDetailScreen() {
             </Pressable>
           )}
         </View>
-      </View>
+        </View>
 
       {/* Stats Bar */}
-      <View style={styles.statsBar}>
+        <View style={styles.statsBar}>
         <View style={[styles.stat, { backgroundColor: colors.surface }]}>
           <Ionicons name="layers" size={16} color={colors.primary} />
           <Text style={[styles.statText, { color: colors.text }]}>
@@ -376,24 +382,24 @@ export default function DeckDetailScreen() {
           <Ionicons name="time" size={16} color="#f59e0b" />
           <Text style={[styles.statText, { color: colors.text }]}>{dueCount} pendentes</Text>
         </View>
-      </View>
+        </View>
 
       {/* Review Button */}
-      {dueCount > 0 && (
-        <View style={styles.reviewSection}>
-          <Button
-            title={`Iniciar Revisão (${dueCount} cards)`}
-            onPress={() => router.push(`/review/${deckId}`)}
-            icon={<Ionicons name="play" size={18} color="#fff" />}
-          />
-        </View>
-      )}
+        {dueCount > 0 && (
+          <View style={styles.reviewSection}>
+            <Button
+              title={`Iniciar Revisão (${dueCount} cards)`}
+              onPress={() => router.push(`/review/${deckId}`)}
+              icon={<Ionicons name="play" size={18} color="#fff" />}
+            />
+          </View>
+        )}
 
       {/* Deck Stats (Feature 2) */}
-      {renderStatsSection()}
+        {renderStatsSection()}
 
       {/* Cards List */}
-      <Animated.FlatList
+        <Animated.FlatList
         data={orderedFlashcards}
         keyExtractor={(item) => item.id}
         itemLayoutAnimation={LinearTransition.duration(350)}
@@ -421,59 +427,60 @@ export default function DeckDetailScreen() {
           )
         }
         renderItem={renderCard}
-      />
+        />
 
       {/* FABs — hide for error deck */}
-      {!isErrorDeck && hasCards && (
-        <>
-          <Pressable
-            onPress={() => router.push({ pathname: "/capture", params: { deckId } })}
-            style={[styles.fabSecondary, { backgroundColor: colors.surface, borderColor: colors.primary }]}
-          >
-            <Ionicons name="sparkles" size={22} color={colors.primary} />
-          </Pressable>
-          <Pressable
-            onPress={() => setShowAddModal(true)}
-            style={[styles.fab, { backgroundColor: colors.primary }]}
-          >
-            <Ionicons name="add" size={28} color="#fff" />
-          </Pressable>
-        </>
-      )}
+        {!isErrorDeck && hasCards && (
+          <>
+            <Pressable
+              onPress={() => router.push({ pathname: "/capture", params: { deckId } })}
+              style={[styles.fabSecondary, { backgroundColor: colors.surface, borderColor: colors.primary }]}
+            >
+              <Ionicons name="sparkles" size={22} color={colors.primary} />
+            </Pressable>
+            <Pressable
+              onPress={() => setShowAddModal(true)}
+              style={[styles.fab, { backgroundColor: colors.primary }]}
+            >
+              <Ionicons name="add" size={28} color="#fff" />
+            </Pressable>
+          </>
+        )}
 
       {/* Add Card Modal */}
-      <Modal visible={showAddModal} transparent animationType="slide">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{ flex: 1 }}
-        >
-          <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss}>
-            <Pressable style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Novo Flashcard</Text>
-              <TextInput
-                value={question}
-                onChangeText={setQuestion}
-                placeholder="Pergunta"
-                placeholderTextColor={colors.textSecondary}
-                multiline
-                style={[styles.textArea, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-              />
-              <TextInput
-                value={answer}
-                onChangeText={setAnswer}
-                placeholder="Resposta"
-                placeholderTextColor={colors.textSecondary}
-                multiline
-                style={[styles.textArea, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-              />
-              <View style={styles.modalButtons}>
-                <Button title="Cancelar" variant="ghost" onPress={() => setShowAddModal(false)} />
-                <Button title="Adicionar" onPress={handleAddCard} />
-              </View>
+        <Modal visible={showAddModal} transparent animationType="slide">
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
+          >
+            <Pressable style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]} onPress={Keyboard.dismiss}>
+              <Pressable style={[styles.modalContent, isTablet && styles.modalContentTablet, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Novo Flashcard</Text>
+                <TextInput
+                  value={question}
+                  onChangeText={setQuestion}
+                  placeholder="Pergunta"
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  style={[styles.textArea, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                />
+                <TextInput
+                  value={answer}
+                  onChangeText={setAnswer}
+                  placeholder="Resposta"
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  style={[styles.textArea, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                />
+                <View style={styles.modalButtons}>
+                  <Button title="Cancelar" variant="ghost" onPress={() => setShowAddModal(false)} />
+                  <Button title="Adicionar" onPress={handleAddCard} />
+                </View>
+              </Pressable>
             </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
+          </KeyboardAvoidingView>
+        </Modal>
+      </ScreenContainer>
     </SafeAreaView>
   );
 }
@@ -659,11 +666,21 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
   },
+  modalOverlayTablet: {
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
   modalContent: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 24,
     gap: 12,
+  },
+  modalContentTablet: {
+    borderRadius: 20,
+    maxWidth: MAX_MODAL_WIDTH,
+    alignSelf: "center" as const,
+    width: "100%",
   },
   modalTitle: { fontSize: 20, fontWeight: "700" },
   textArea: {

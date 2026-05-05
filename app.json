@@ -79,7 +79,11 @@
           "cameraPermissionText": "O Memora usa a câmera para fotografar textos e gerar flashcards automaticamente."
         }
       ],
-      ["react-native-share", {}]
+      [
+        "react-native-share",
+        {}
+      ],
+      "expo-secure-store"
     ]
   }
 }

@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "../constants/theme";
 import { useReviewStore } from "../stores/reviewStore";
+import { ScreenContainer } from "../components/ScreenContainer";
 
 const WEEKDAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
 
@@ -105,15 +106,16 @@ export default function StreakScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
-          </Pressable>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Sequência</Text>
-          <View style={{ width: 24 }} />
-        </View>
+      <ScreenContainer>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          {/* Header */}
+          <View style={styles.header}>
+            <Pressable onPress={() => router.back()} hitSlop={8}>
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
+            </Pressable>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Sequência</Text>
+            <View style={{ width: 24 }} />
+          </View>
 
         {/* Streak hero */}
         <View style={[styles.hero, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -200,7 +202,8 @@ export default function StreakScreen() {
             <Text style={[styles.legendText, { color: colors.textSecondary }]}>Dia com revisão</Text>
           </View>
         </View>
-      </ScrollView>
+        </ScrollView>
+      </ScreenContainer>
     </SafeAreaView>
   );
 }

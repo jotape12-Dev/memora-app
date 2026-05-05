@@ -23,10 +23,13 @@ import { DeckCard } from "../components/DeckCard";
 import { EmptyState } from "../components/EmptyState";
 import { Button } from "../components/Button";
 import { DeckColors } from "../constants/colors";
+import { ScreenContainer } from "../components/ScreenContainer";
+import { useLayout, MAX_MODAL_WIDTH } from "../hooks/useLayout";
 import type { Deck } from "../types/database";
 
 export default function DecksScreen() {
   const colors = useThemeColors();
+  const { isTablet } = useLayout();
   const { decks, dueCards, fetchDecks, fetchAllDueCards, createDeck, deleteDeck } = useDecksStore();
 
   const [search, setSearch] = useState("");
@@ -124,6 +127,7 @@ export default function DecksScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <ScreenContainer>
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={8}>
@@ -174,6 +178,7 @@ export default function DecksScreen() {
         data={filtered}
         keyExtractor={(item) => item.id}
         renderItem={renderDeck}
+        style={{ flex: 1 }}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
@@ -212,8 +217,8 @@ export default function DecksScreen() {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1 }}
         >
-          <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss}>
-            <Pressable style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+          <Pressable style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]} onPress={Keyboard.dismiss}>
+            <Pressable style={[styles.modalContent, isTablet && styles.modalContentTablet, { backgroundColor: colors.surface }]}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>Novo Deck</Text>
 
               <TextInput
@@ -254,6 +259,7 @@ export default function DecksScreen() {
           </Pressable>
         </KeyboardAvoidingView>
       </Modal>
+      </ScreenContainer>
     </SafeAreaView>
   );
 }
@@ -339,11 +345,21 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
   },
+  modalOverlayTablet: {
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
   modalContent: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 24,
     gap: 12,
+  },
+  modalContentTablet: {
+    borderRadius: 20,
+    maxWidth: MAX_MODAL_WIDTH,
+    alignSelf: "center" as const,
+    width: "100%",
   },
   modalTitle: { fontSize: 20, fontWeight: "700", marginBottom: 4 },
   input: {

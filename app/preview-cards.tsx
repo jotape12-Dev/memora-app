@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "../constants/theme";
 import { useDecksStore } from "../stores/decksStore";
 import { Button } from "../components/Button";
+import { ScreenContainer } from "../components/ScreenContainer";
 import type { GeneratedFlashcard } from "../types/database";
 
 export default function PreviewCardsScreen() {
@@ -99,35 +100,38 @@ export default function PreviewCardsScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <Pressable onPress={handleBackToHome}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </Pressable>
-        <Text style={[styles.title, { color: colors.text }]}>Preview dos Cards</Text>
-        <Text style={[styles.count, { color: colors.textSecondary }]}>{cards.length} cards</Text>
-      </View>
+      <ScreenContainer>
+        <View style={styles.header}>
+          <Pressable onPress={handleBackToHome}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </Pressable>
+          <Text style={[styles.title, { color: colors.text }]}>Preview dos Cards</Text>
+          <Text style={[styles.count, { color: colors.textSecondary }]}>{cards.length} cards</Text>
+        </View>
 
-      <FlatList
-        data={cards}
-        keyExtractor={(_, i) => i.toString()}
-        contentContainerStyle={styles.list}
-        renderItem={renderCard}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={{ color: colors.textSecondary }}>Nenhum card gerado.</Text>
-          </View>
-        }
-      />
-
-      <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-        <Button
-          title={`Adicionar ${cards.length} cards ao Deck`}
-          onPress={handleSave}
-          loading={saving}
-          disabled={cards.length === 0}
-          icon={<Ionicons name="checkmark" size={18} color="#fff" />}
+        <FlatList
+          data={cards}
+          keyExtractor={(_, i) => i.toString()}
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.list}
+          renderItem={renderCard}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={{ color: colors.textSecondary }}>Nenhum card gerado.</Text>
+            </View>
+          }
         />
-      </View>
+
+        <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+          <Button
+            title={`Adicionar ${cards.length} cards ao Deck`}
+            onPress={handleSave}
+            loading={saving}
+            disabled={cards.length === 0}
+            icon={<Ionicons name="checkmark" size={18} color="#fff" />}
+          />
+        </View>
+      </ScreenContainer>
     </SafeAreaView>
   );
 }

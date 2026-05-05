@@ -15,6 +15,7 @@ import { useDecksStore } from "../stores/decksStore";
 import { PremiumGate } from "../components/PremiumGate";
 import { Button } from "../components/Button";
 import { Input } from "../components/Input";
+import { ScreenContainer } from "../components/ScreenContainer";
 
 const LEVELS = ["Básico", "Intermediário", "Avançado"];
 const QUANTITIES = [5, 10, 15, 20, 30];
@@ -85,116 +86,118 @@ export default function GenerateTopicScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </Pressable>
-        <Text style={[styles.title, { color: colors.text }]}>Gerar por tópico</Text>
-        <View style={[styles.premiumBadge, { backgroundColor: colors.primary }]}>
-          <Ionicons name="star" size={12} color="#fff" />
-          <Text style={styles.premiumText}>Premium</Text>
+      <ScreenContainer>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </Pressable>
+          <Text style={[styles.title, { color: colors.text }]}>Gerar por tópico</Text>
+          <View style={[styles.premiumBadge, { backgroundColor: colors.primary }]}>
+            <Ionicons name="star" size={12} color="#fff" />
+            <Text style={styles.premiumText}>Premium</Text>
+          </View>
         </View>
-      </View>
 
-      <PremiumGate feature="geração por tópico">
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Input
-            label="Nome do conteúdo"
-            placeholder="Ex: Segunda Guerra Mundial, Integral por partes..."
-            value={topic}
-            onChangeText={setTopic}
-          />
-
-          {/* Level */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.text }]}>Nível</Text>
-            <View style={styles.chipRow}>
-              {LEVELS.map((l) => (
-                <Pressable
-                  key={l}
-                  onPress={() => setLevel(l)}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: level === l ? colors.primary : colors.muted,
-                    },
-                  ]}
-                >
-                  <Text style={{ color: level === l ? "#fff" : colors.text, fontSize: 13, fontWeight: "500" }}>
-                    {l}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          {/* Quantity */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.text }]}>Quantidade de cards</Text>
-            <View style={styles.chipRow}>
-              {QUANTITIES.map((q) => (
-                <Pressable
-                  key={q}
-                  onPress={() => setQuantity(q)}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: quantity === q ? colors.primary : colors.muted,
-                    },
-                  ]}
-                >
-                  <Text style={{ color: quantity === q ? "#fff" : colors.text, fontSize: 13, fontWeight: "500" }}>
-                    {q}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          {/* Deck selector */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.text }]}>Deck (opcional — cria automaticamente)</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-              {decks.map((d) => (
-                <Pressable
-                  key={d.id}
-                  onPress={() => setSelectedDeckId(selectedDeckId === d.id ? null : d.id)}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: selectedDeckId === d.id ? colors.primary : colors.muted,
-                    },
-                  ]}
-                >
-                  <Text style={{ color: selectedDeckId === d.id ? "#fff" : colors.text, fontSize: 13 }}>
-                    {d.title}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Additional context */}
-          <Input
-            label="Contexto adicional (opcional)"
-            placeholder="Informações extras para guiar a geração..."
-            value={additionalContext}
-            onChangeText={setAdditionalContext}
-            multiline
-            style={{ minHeight: 80, textAlignVertical: "top" }}
-          />
-
-          <View style={styles.generateBtn}>
-            <Button
-              title="Gerar com IA"
-              onPress={handleGenerate}
-              loading={generating}
-              disabled={!topic.trim()}
-              icon={<Ionicons name="sparkles" size={18} color="#fff" />}
+        <PremiumGate feature="geração por tópico">
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+            <Input
+              label="Nome do conteúdo"
+              placeholder="Ex: Segunda Guerra Mundial, Integral por partes..."
+              value={topic}
+              onChangeText={setTopic}
             />
-          </View>
-        </ScrollView>
-      </PremiumGate>
+
+            {/* Level */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: colors.text }]}>Nível</Text>
+              <View style={styles.chipRow}>
+                {LEVELS.map((l) => (
+                  <Pressable
+                    key={l}
+                    onPress={() => setLevel(l)}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: level === l ? colors.primary : colors.muted,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: level === l ? "#fff" : colors.text, fontSize: 13, fontWeight: "500" }}>
+                      {l}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            {/* Quantity */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: colors.text }]}>Quantidade de cards</Text>
+              <View style={styles.chipRow}>
+                {QUANTITIES.map((q) => (
+                  <Pressable
+                    key={q}
+                    onPress={() => setQuantity(q)}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: quantity === q ? colors.primary : colors.muted,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: quantity === q ? "#fff" : colors.text, fontSize: 13, fontWeight: "500" }}>
+                      {q}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            {/* Deck selector */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: colors.text }]}>Deck (opcional — cria automaticamente)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                {decks.map((d) => (
+                  <Pressable
+                    key={d.id}
+                    onPress={() => setSelectedDeckId(selectedDeckId === d.id ? null : d.id)}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: selectedDeckId === d.id ? colors.primary : colors.muted,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: selectedDeckId === d.id ? "#fff" : colors.text, fontSize: 13 }}>
+                      {d.title}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Additional context */}
+            <Input
+              label="Contexto adicional (opcional)"
+              placeholder="Informações extras para guiar a geração..."
+              value={additionalContext}
+              onChangeText={setAdditionalContext}
+              multiline
+              style={{ minHeight: 80, textAlignVertical: "top" }}
+            />
+
+            <View style={styles.generateBtn}>
+              <Button
+                title="Gerar com IA"
+                onPress={handleGenerate}
+                loading={generating}
+                disabled={!topic.trim()}
+                icon={<Ionicons name="sparkles" size={18} color="#fff" />}
+              />
+            </View>
+          </ScrollView>
+        </PremiumGate>
+      </ScreenContainer>
     </SafeAreaView>
   );
 }
