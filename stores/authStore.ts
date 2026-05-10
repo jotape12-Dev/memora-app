@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { initRevenueCat, logOutRevenueCat } from "../lib/revenuecat";
 import { normalizeDisplayName } from "../lib/displayName";
 import { useDecksStore } from "./decksStore";
+import { useFoldersStore } from "./foldersStore";
 import { useReviewStore } from "./reviewStore";
 import type { Profile } from "../types/database";
 import type { RealtimeChannel, Session, User } from "@supabase/supabase-js";
@@ -168,6 +169,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await supabase.auth.signOut();
     set({ session: null, user: null, profile: null });
     useDecksStore.getState().reset();
+    useFoldersStore.getState().reset();
     useReviewStore.getState().reset();
   },
 
@@ -184,6 +186,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await supabase.auth.signOut();
     set({ session: null, user: null, profile: null });
     useDecksStore.getState().reset();
+    useFoldersStore.getState().reset();
     useReviewStore.getState().reset();
     return { error: null };
   },

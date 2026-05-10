@@ -18,6 +18,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import { useThemeColors } from "../constants/theme";
 import { useDecksStore } from "../stores/decksStore";
+import { useFoldersStore } from "../stores/foldersStore";
 import { useAuthStore } from "../stores/authStore";
 import { Button } from "../components/Button";
 import { GenerationLimitBadge } from "../components/GenerationLimitBadge";
@@ -42,6 +43,25 @@ export default function CaptureScreen() {
 
   const { generateFromText, generateFromPdf, generating } = useDecksStore();
   const { decks, createDeck, fetchDecks } = useDecksStore();
+  const { folders, fetchFolders } = useFoldersStore();
+  const [deckSearch, setDeckSearch] = useState("");
+
+  React.useEffect(() => {
+    fetchFolders();
+  }, [fetchFolders]);
+
+  const folderPath = React.useCallback(
+    (folderId: string | null): string => {
+      if (!folderId) return "";
+      const folder = folders.find((f) => f.id === folderId);
+      if (!folder) return "";
+      const parent = folder.parent_folder_id
+        ? folders.find((f) => f.id === folder.parent_folder_id)
+        : null;
+      return parent ? `${parent.name} / ${folder.name}` : folder.name;
+    },
+    [folders]
+  );
 
   const [pdfName, setPdfName] = useState<string | null>(null);
   const [pdfSize, setPdfSize] = useState<number>(0);
@@ -453,38 +473,96 @@ export default function CaptureScreen() {
             onPress={() => setShowDeckPicker(!showDeckPicker)}
             style={[styles.deckPicker, { backgroundColor: colors.surface, borderColor: colors.border }]}
           >
-            <Text style={{ color: selectedDeck ? colors.text : colors.textSecondary }}>
-              {selectedDeck ? selectedDeck.title : "Selecione um deck..."}
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: selectedDeck ? colors.text : colors.textSecondary }} numberOfLines={1}>
+                {selectedDeck ? selectedDeck.title : "Selecione um deck..."}
+              </Text>
+              {selectedDeck && folderPath(selectedDeck.folder_id) ? (
+                <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                  {folderPath(selectedDeck.folder_id)}
+                </Text>
+              ) : null}
+            </View>
             <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
           </Pressable>
 
-          {showDeckPicker && (
-            <View style={[styles.deckList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              {decks.map((deck) => (
-                <Pressable
-                  key={deck.id}
-                  onPress={() => { setSelectedDeckId(deck.id); setShowDeckPicker(false); }}
-                  style={[styles.deckOption, selectedDeckId === deck.id && { backgroundColor: colors.muted }]}
-                >
-                  <View style={[styles.deckDot, { backgroundColor: deck.color }]} />
-                  <Text style={{ color: colors.text }}>{deck.title}</Text>
-                </Pressable>
-              ))}
-              <View style={[styles.newDeckRow, { borderTopColor: colors.border }]}>
-                <TextInput
-                  value={newDeckTitle}
-                  onChangeText={setNewDeckTitle}
-                  placeholder="Nome do novo deck..."
-                  placeholderTextColor={colors.textSecondary}
-                  style={[styles.newDeckInput, { color: colors.text }]}
-                />
-                <Pressable onPress={handleCreateDeck} style={[styles.newDeckBtn, { backgroundColor: colors.primary }]}>
-                  <Ionicons name="add" size={18} color="#fff" />
-                </Pressable>
+          {showDeckPicker && (() => {
+            const visibleDecks = decks.filter((d) => !d.is_error_deck);
+            const sortedDecks = [...visibleDecks].sort((a, b) =>
+              b.created_at.localeCompare(a.created_at)
+            );
+            const q = deckSearch.trim().toLowerCase();
+            const filteredDecks = q
+              ? sortedDecks.filter((d) => {
+                  const path = folderPath(d.folder_id).toLowerCase();
+                  return (
+                    d.title.toLowerCase().includes(q) ||
+                    d.subject?.toLowerCase().includes(q) ||
+                    path.includes(q)
+                  );
+                })
+              : sortedDecks;
+
+            return (
+              <View style={[styles.deckList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={[styles.deckSearchRow, { borderBottomColor: colors.border }]}>
+                  <Ionicons name="search" size={14} color={colors.textSecondary} />
+                  <TextInput
+                    value={deckSearch}
+                    onChangeText={setDeckSearch}
+                    placeholder="Procurar deck ou pasta..."
+                    placeholderTextColor={colors.textSecondary}
+                    style={[styles.deckSearchInput, { color: colors.text }]}
+                  />
+                  {deckSearch.length > 0 && (
+                    <Pressable onPress={() => setDeckSearch("")} hitSlop={8}>
+                      <Ionicons name="close-circle" size={14} color={colors.textSecondary} />
+                    </Pressable>
+                  )}
+                </View>
+                {filteredDecks.length === 0 ? (
+                  <Text style={[styles.deckEmpty, { color: colors.textSecondary }]}>
+                    {q ? "Nenhum deck encontrado." : "Nenhum deck ainda. Crie um abaixo."}
+                  </Text>
+                ) : (
+                  filteredDecks.map((deck) => {
+                    const path = folderPath(deck.folder_id);
+                    return (
+                      <Pressable
+                        key={deck.id}
+                        onPress={() => { setSelectedDeckId(deck.id); setShowDeckPicker(false); setDeckSearch(""); }}
+                        style={[styles.deckOption, selectedDeckId === deck.id && { backgroundColor: colors.muted }]}
+                      >
+                        <View style={[styles.deckDot, { backgroundColor: deck.color }]} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: colors.text, fontSize: 14, fontWeight: "500" }} numberOfLines={1}>
+                            {deck.title}
+                          </Text>
+                          {path ? (
+                            <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                              {path}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </Pressable>
+                    );
+                  })
+                )}
+                <View style={[styles.newDeckRow, { borderTopColor: colors.border }]}>
+                  <TextInput
+                    value={newDeckTitle}
+                    onChangeText={setNewDeckTitle}
+                    placeholder="Nome do novo deck..."
+                    placeholderTextColor={colors.textSecondary}
+                    style={[styles.newDeckInput, { color: colors.text }]}
+                  />
+                  <Pressable onPress={handleCreateDeck} style={[styles.newDeckBtn, { backgroundColor: colors.primary }]}>
+                    <Ionicons name="add" size={18} color="#fff" />
+                  </Pressable>
+                </View>
               </View>
-            </View>
-          )}
+            );
+          })()}
         </View>
 
         {/* Generate Button */}
@@ -584,6 +662,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
     overflow: "hidden",
   },
+  deckSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+  },
+  deckSearchInput: { flex: 1, fontSize: 13, paddingVertical: 4 },
+  deckEmpty: { fontSize: 13, padding: 16, textAlign: "center" },
   deckOption: {
     flexDirection: "row",
     alignItems: "center",

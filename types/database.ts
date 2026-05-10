@@ -18,6 +18,17 @@ export interface Deck {
   color: string;
   card_count: number;
   is_error_deck: boolean;
+  folder_id: string | null;
+  created_at: string;
+}
+
+export interface Folder {
+  id: string;
+  user_id: string;
+  parent_folder_id: string | null;
+  name: string;
+  color: string;
+  icon: string;
   created_at: string;
 }
 

@@ -18,12 +18,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
 import { useAuthStore } from "../../stores/authStore";
 import { useDecksStore } from "../../stores/decksStore";
+import { useFoldersStore } from "../../stores/foldersStore";
 import { useReviewStore } from "../../stores/reviewStore";
+import { CreateOptionsSheet } from "../../components/CreateOptionsSheet";
+import { FolderFormModal } from "../../components/FolderFormModal";
 import { useThemeColors } from "../../constants/theme";
 import { GenerationLimitBadge } from "../../components/GenerationLimitBadge";
-import { EmptyState } from "../../components/EmptyState";
-import { DeckCard } from "../../components/DeckCard";
 import { Button } from "../../components/Button";
+import { FolderContents } from "../../components/FolderContents";
 import { ShareStoryModal } from "../../components/ShareStoryModal";
 import { DeckColors } from "../../constants/colors";
 import { ScreenContainer } from "../../components/ScreenContainer";
@@ -48,13 +50,25 @@ export default function HomeScreen() {
   const { decks, fetchDecks, createDeck, errorDeckCardCount, fetchErrorDeckCount } = useDecksStore();
   const { dueCards, fetchAllDueCards } = useDecksStore();
   const { streak, activeDays, calculateStreak } = useReviewStore();
+  const { createFolder } = useFoldersStore();
   const [refreshing, setRefreshing] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showCreateSheet, setShowCreateSheet] = useState(false);
+  const [showFolderForm, setShowFolderForm] = useState(false);
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
   const [selectedColor, setSelectedColor] = useState(DeckColors[0]);
   const [homeStats, setHomeStats] = useState<HomeStats | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
+
+  const handleCreateFolderSubmit = async (name: string, color: string, icon: string) => {
+    const created = await createFolder(name, null, color, icon);
+    if (!created) {
+      Alert.alert("Erro", "Não foi possível criar a pasta.");
+      return;
+    }
+    setShowFolderForm(false);
+  };
 
   const handleCreate = async () => {
     if (!title.trim()) {
@@ -118,9 +132,7 @@ export default function HomeScreen() {
     return "Boa noite";
   };
 
-  // Sort regular decks by created_at desc
   const regularDecks = decks.filter((d) => !d.is_error_deck);
-  const sortedDecks = [...regularDecks].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   // Error deck banner
   const errorDeck = decks.find((d) => d.is_error_deck);
@@ -239,14 +251,11 @@ export default function HomeScreen() {
             <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>acerto hoje</Text>
           </View>
 
-          <Pressable
-            onPress={() => router.push("/decks")}
-            style={[styles.kpiCard, { backgroundColor: "#7c3aed", borderColor: "#7c3aed" }]}
-          >
-            <Ionicons name="library" size={22} color="#fff" />
-            <Text style={[styles.kpiNumber, { color: "#fff" }]}>{regularDecks.length}</Text>
-            <Text style={[styles.kpiLabel, { color: "rgba(255,255,255,0.9)" }]}>decks</Text>
-          </Pressable>
+          <View style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Ionicons name="library" size={22} color="#7c3aed" />
+            <Text style={[styles.kpiNumber, { color: colors.text }]}>{regularDecks.length}</Text>
+            <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>decks</Text>
+          </View>
         </ScrollView>
 
         {/* Weekly Chart */}
@@ -332,42 +341,42 @@ export default function HomeScreen() {
           </Pressable>
         )}
 
-        {/* Decks Section */}
+        {/* Folders + Decks */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Meus Decks</Text>
-          {regularDecks.length === 0 ? (
-            <EmptyState
-              icon="library-outline"
-              title="Nenhum deck ainda"
-              description="Crie seu primeiro deck capturando texto de um livro ou digitando um conteúdo."
-              actionLabel="Criar deck"
-              onAction={() => setShowModal(true)}
-            />
-          ) : (
-            <View style={styles.deckList}>
-              {sortedDecks.map((deck) => (
-                <DeckCard
-                  key={deck.id}
-                  deck={deck}
-                  dueCount={dueByDeck[deck.id] || 0}
-                  onPress={() => router.push(`/deck/${deck.id}`)}
-                />
-              ))}
-            </View>
-          )}
+          <FolderContents
+            parentFolderId={null}
+            onRequestCreate={() => setShowCreateSheet(true)}
+          />
         </View>
       </ScrollView>
       </ScreenContainer>
 
-      {/* FABs: only when user already has at least one deck */}
-      {regularDecks.length > 0 && (
-        <Pressable
-          onPress={() => setShowModal(true)}
-          style={[styles.fab, { backgroundColor: colors.primary }]}
-        >
-          <Ionicons name="add" size={28} color="#fff" />
-        </Pressable>
-      )}
+      {/* FAB always visible — empty state's button also opens the sheet */}
+      <Pressable
+        onPress={() => setShowCreateSheet(true)}
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+      >
+        <Ionicons name="add" size={28} color="#fff" />
+      </Pressable>
+
+      <CreateOptionsSheet
+        visible={showCreateSheet}
+        onClose={() => setShowCreateSheet(false)}
+        onCreateFolder={() => {
+          setShowCreateSheet(false);
+          setTimeout(() => setShowFolderForm(true), 200);
+        }}
+        onCreateDeck={() => {
+          setShowCreateSheet(false);
+          setTimeout(() => setShowModal(true), 200);
+        }}
+      />
+
+      <FolderFormModal
+        visible={showFolderForm}
+        onClose={() => setShowFolderForm(false)}
+        onSubmit={handleCreateFolderSubmit}
+      />
 
       {/* Create Deck Modal */}
       <Modal visible={showModal} transparent animationType="slide">

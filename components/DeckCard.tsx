@@ -8,9 +8,10 @@ interface DeckCardProps {
   deck: Deck;
   dueCount?: number;
   onPress: () => void;
+  onLongPress?: () => void;
 }
 
-export function DeckCard({ deck, dueCount = 0, onPress }: DeckCardProps) {
+export function DeckCard({ deck, dueCount = 0, onPress, onLongPress }: DeckCardProps) {
   const colors = useThemeColors();
   const isError = deck.is_error_deck;
 
@@ -27,6 +28,8 @@ export function DeckCard({ deck, dueCount = 0, onPress }: DeckCardProps) {
     >
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={350}
         style={({ pressed }) => [
           styles.pressable,
           { opacity: pressed ? 0.7 : 1 },

@@ -33,9 +33,10 @@ interface DecksState {
   decks: Deck[];
   loading: boolean;
   fetchDecks: () => Promise<void>;
-  createDeck: (title: string, subject?: string, color?: string) => Promise<Deck | null>;
+  createDeck: (title: string, subject?: string, color?: string, folderId?: string | null) => Promise<Deck | null>;
   updateDeck: (id: string, updates: Partial<Deck>) => Promise<void>;
   deleteDeck: (id: string) => Promise<void>;
+  moveDeck: (id: string, folderId: string | null) => Promise<void>;
 
   // Error deck
   errorDeck: Deck | null;
@@ -88,7 +89,7 @@ export const useDecksStore = create<DecksState>((set, get) => ({
     set({ loading: false });
   },
 
-  createDeck: async (title, subject, color) => {
+  createDeck: async (title, subject, color, folderId) => {
     const { data: { session } } = await supabase.auth.getSession();
     const user = session?.user ?? null;
     if (!user) return null;
@@ -98,6 +99,7 @@ export const useDecksStore = create<DecksState>((set, get) => ({
       title,
       subject: subject || null,
       color: color || "#01696f",
+      folder_id: folderId ?? null,
     };
 
     let { data, error } = await supabase
@@ -165,6 +167,24 @@ export const useDecksStore = create<DecksState>((set, get) => ({
     if (!error) {
       set((state) => ({
         decks: state.decks.filter((d) => d.id !== id),
+      }));
+    }
+  },
+
+  moveDeck: async (id, folderId) => {
+    const deck = get().decks.find((d) => d.id === id);
+    if (deck?.is_error_deck) return;
+
+    const { error } = await supabase
+      .from("decks")
+      .update({ folder_id: folderId })
+      .eq("id", id);
+
+    if (!error) {
+      set((state) => ({
+        decks: state.decks.map((d) =>
+          d.id === id ? { ...d, folder_id: folderId } : d
+        ),
       }));
     }
   },
